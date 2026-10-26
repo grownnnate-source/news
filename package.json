@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "thread-news",
   "version": "1.0.0",
   "private": true,
@@ -11,6 +11,7 @@
   "scripts": {
     "dev:backend": "npm --prefix backend run dev",
     "dev:web": "npm --prefix web run dev",
-    "dev:mobile": "npm --prefix mobile start"
+    "dev:mobile": "npm --prefix mobile start",
+    "sync": "npm --prefix backend run sync"
   }
 }

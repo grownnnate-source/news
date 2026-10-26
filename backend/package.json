@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "thread-news-backend",
   "version": "1.0.0",
   "private": true,
@@ -6,7 +6,8 @@
   "description": "ThreadNews Backend API, Ingestion Engine & Supabase Gateway",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "sync": "node src/services/ingestionWorker.js"
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
