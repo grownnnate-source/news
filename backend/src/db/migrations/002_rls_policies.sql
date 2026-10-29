@@ -33,5 +33,11 @@ CREATE POLICY "Anyone can insert reactions"
     ON reactions FOR INSERT 
     WITH CHECK (true);
 
--- Note: Ingestion worker / Backend uses the Supabase 'service_role' secret key,
+-- 5. Article Ingestion Policy (Allows backend worker / sync to insert and update articles)
+CREATE POLICY "Allow article management" 
+    ON articles FOR ALL 
+    USING (true) 
+    WITH CHECK (true);
+
+-- Note: Ingestion worker / Backend can also use the Supabase 'service_role' secret key,
 -- which automatically bypasses RLS to insert/update sources and articles securely.

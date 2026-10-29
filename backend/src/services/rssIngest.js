@@ -1,4 +1,4 @@
-﻿import Parser from "rss-parser";
+import Parser from "rss-parser";
 import axios from "axios";
 import * as cheerio from "cheerio";
 import { DEFAULT_CITIES, GLOBAL_FEEDS } from "../config/sources.js";
@@ -21,6 +21,33 @@ function cleanTextSnippet(htmlOrText = "") {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 280);
+}
+
+// Generic RSS Feed Ingester (used by ingestionWorker)
+export async function fetchRssFeed(feedUrl, limit = 15) {
+  try {
+    const feed = await rssParser.parseURL(feedUrl);
+    if (!feed?.items) return [];
+
+    return feed.items.slice(0, limit).map((item) => {
+      const rawText = item["content:encoded"] || item.content || item.contentSnippet || item.summary || "";
+      const cleaned = cleanTextSnippet(rawText);
+      const imageUrl = item.enclosure?.url || (item.mediaContent?.[0]?.$?.url) || null;
+      const externalId = item.guid || item.id || item.link;
+
+      return {
+        externalId: String(externalId),
+        title: item.title ? item.title.trim() : "Untitled",
+        content: cleaned,
+        originalUrl: item.link || feedUrl,
+        imageUrl,
+        publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString()
+      };
+    });
+  } catch (err) {
+    console.warn(`[RSS Ingest] Failed to fetch feed ${feedUrl}:`, err.message);
+    return [];
+  }
 }
 
 // 1. Ingest Kulu Media (Direct Ethiopian RSS)
