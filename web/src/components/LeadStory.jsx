@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 
-export default function LeadStory({ article, onOpenReader, onReact }) {
+export default function LeadStory({ article, onOpenReader, onReact, onWatchVideo }) {
   if (!article) return null;
 
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
@@ -74,7 +74,11 @@ export default function LeadStory({ article, onOpenReader, onReact }) {
 
           {hasVideo && (
             <div
-              onClick={() => onOpenReader(article)}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onWatchVideo) onWatchVideo(article);
+                else onOpenReader(article);
+              }}
               className="absolute inset-0 bg-black/30 flex items-center justify-center cursor-pointer hover:bg-black/40 transition-colors"
             >
               <div className="w-16 h-16 rounded-full bg-white/90 text-[#111111] flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
@@ -82,8 +86,9 @@ export default function LeadStory({ article, onOpenReader, onReact }) {
                   <path d="M8 5v14l11-7z" />
                 </svg>
               </div>
-              <div className="absolute bottom-3 left-3 bg-black/75 text-white text-xs px-2.5 py-1 rounded font-mono uppercase tracking-wider">
-                ▶ Video Report Included
+              <div className="absolute bottom-3 left-3 bg-black/75 text-white text-xs px-2.5 py-1 rounded font-mono uppercase tracking-wider flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+                <span>Watch Video Report</span>
               </div>
             </div>
           )}
@@ -115,13 +120,26 @@ export default function LeadStory({ article, onOpenReader, onReact }) {
 
       {/* Actions and 1-Tap Reactions Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-3 ink-border-t text-xs">
-        <button
-          onClick={() => onOpenReader(article)}
-          className="font-medium text-[#111111] hover:underline underline-offset-4 flex items-center space-x-1"
-        >
-          <span>Read Full Ad-Free Story</span>
-          <span>→</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => onOpenReader(article)}
+            className="font-medium text-[#111111] hover:underline underline-offset-4 flex items-center space-x-1"
+          >
+            <span>Read Full Story</span>
+            <span>→</span>
+          </button>
+          {hasVideo && (
+            <>
+              <span className="text-[#888]">·</span>
+              <button
+                onClick={() => (onWatchVideo ? onWatchVideo(article) : onOpenReader(article))}
+                className="font-semibold text-red-700 hover:text-red-900 flex items-center space-x-1"
+              >
+                <span>▶ Watch Video</span>
+              </button>
+            </>
+          )}
+        </div>
 
         {/* Quiet 1-Tap Sentiment Counters */}
         <div className="flex items-center space-x-2">

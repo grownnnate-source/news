@@ -43,6 +43,11 @@ export default function StoryRow({ article, onOpenReader, onReact }) {
                 🇪🇹 Local
               </span>
             )}
+            {(article.video_url || article.title?.toLowerCase().includes("video") || article.title?.toLowerCase().includes("briefing")) && (
+              <span className="text-[10px] bg-[#FFF0F0] text-red-700 px-1.5 py-0.2 rounded font-mono font-semibold border border-red-200">
+                ▶ Video
+              </span>
+            )}
           </div>
 
           {/* Headline */}
