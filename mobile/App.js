@@ -27,8 +27,10 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeScope, setActiveScope] = useState("all"); // 'all' | 'local' | 'global'
   const [activeCategory, setActiveCategory] = useState("All");
+  const [activeLanguage, setActiveLanguage] = useState("all"); // 'all' | 'am' | 'en'
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStory, setActiveStory] = useState(null);
+  const [activeVideo, setActiveVideo] = useState(null);
 
   // Fetch feed from backend
   const fetchArticles = useCallback(async () => {
@@ -101,15 +103,37 @@ export default function App() {
   };
 
   const filteredArticles = useMemo(() => {
-    if (!searchQuery.trim()) return articles;
-    const q = searchQuery.toLowerCase();
-    return articles.filter(
-      (a) =>
-        a.title?.toLowerCase().includes(q) ||
-        a.source_name?.toLowerCase().includes(q) ||
-        a.content?.toLowerCase().includes(q)
-    );
-  }, [articles, searchQuery]);
+    let result = articles;
+
+    // 1. Language Filter
+    if (activeLanguage === "am") {
+      result = result.filter(
+        (a) =>
+          /[\u1200-\u137F]/.test(a.title) ||
+          /[\u1200-\u137F]/.test(a.content || "") ||
+          a.source_name?.toLowerCase().includes("amharic") ||
+          a.source_name?.toLowerCase().includes("tikvah")
+      );
+    } else if (activeLanguage === "en") {
+      result = result.filter(
+        (a) =>
+          !/[\u1200-\u137F]/.test(a.title) &&
+          !a.source_name?.toLowerCase().includes("amharic")
+      );
+    }
+
+    // 2. Search Query Filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (a) =>
+          a.title?.toLowerCase().includes(q) ||
+          a.source_name?.toLowerCase().includes(q) ||
+          a.content?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [articles, activeLanguage, searchQuery]);
 
   const leadStory = filteredArticles[0] || null;
   const otherStories = filteredArticles.slice(1);
@@ -120,15 +144,45 @@ export default function App() {
 
       {/* Broadsheet Top Utility & Masthead */}
       <View style={styles.mastheadContainer}>
+        {/* Edition Row with Language Toggle */}
         <View style={styles.editionRow}>
           <Text style={styles.editionText}>
-            {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · ADDIS ABABA · TOKYO
+            {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · WIRE
           </Text>
-          <Text style={styles.editionTag}>VERIFIED WIRE</Text>
+
+          {/* 1-Tap Language Toggle */}
+          <View style={styles.langToggleRow}>
+            <TouchableOpacity
+              onPress={() => setActiveLanguage("all")}
+              style={[styles.langBtn, activeLanguage === "all" && styles.langBtnActive]}
+            >
+              <Text style={[styles.langBtnText, activeLanguage === "all" && styles.langBtnTextActive]}>
+                All
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setActiveLanguage("am")}
+              style={[styles.langBtn, activeLanguage === "am" && styles.langBtnActive]}
+            >
+              <Text style={[styles.langBtnText, activeLanguage === "am" && styles.langBtnTextActive]}>
+                አማርኛ
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setActiveLanguage("en")}
+              style={[styles.langBtn, activeLanguage === "en" && styles.langBtnActive]}
+            >
+              <Text style={[styles.langBtnText, activeLanguage === "en" && styles.langBtnTextActive]}>
+                EN
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Text style={styles.mastheadTitle}>THREADNEWS</Text>
-        <Text style={styles.mastheadSub}>The Regional & Global Dispatch</Text>
+        <Text style={styles.mastheadSub}>
+          {activeLanguage === "am" ? "የተረጋገጡ የሀገር ውስጥና ዓለም አቀፍ ዜናዎች" : "The Regional & Global Dispatch"}
+        </Text>
 
         {/* Scope Tabs */}
         <View style={styles.scopeTabsRow}>
@@ -212,22 +266,34 @@ export default function App() {
 
         {/* Lead Story Card */}
         {leadStory && !loading && (
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => setActiveStory(leadStory)}
-            style={styles.leadCard}
-          >
+          <View style={styles.leadCard}>
             <View style={styles.badgeRow}>
               <Text style={styles.sourceTag}>{leadStory.source_name}</Text>
               <Text style={styles.verifiedBadge}>✓ Cross-Checked</Text>
             </View>
 
-            <Text style={styles.leadTitle}>{leadStory.title}</Text>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setActiveStory(leadStory)}
+            >
+              <Text style={styles.leadTitle}>{leadStory.title}</Text>
+            </TouchableOpacity>
 
             {leadStory.image_url ? (
-              <View style={styles.leadImageWrapper}>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => setActiveVideo(leadStory)}
+                style={styles.leadImageWrapper}
+              >
                 <Image source={{ uri: leadStory.image_url }} style={styles.leadImage} />
-              </View>
+                {/* Video Play Overlay */}
+                <View style={styles.leadVideoOverlay}>
+                  <View style={styles.leadPlayCircle}>
+                    <Text style={styles.leadPlayArrow}>▶</Text>
+                  </View>
+                  <Text style={styles.leadVideoTag}>WATCH VIDEO REPORT</Text>
+                </View>
+              </TouchableOpacity>
             ) : null}
 
             {/* 3-Bullet Factual Takeaways */}
@@ -245,6 +311,19 @@ export default function App() {
                   • {bullet}
                 </Text>
               ))}
+            </View>
+
+            {/* Action Bar */}
+            <View style={styles.leadActionRow}>
+              <TouchableOpacity onPress={() => setActiveStory(leadStory)}>
+                <Text style={styles.readFullText}>Read Ad-Free Story →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setActiveVideo(leadStory)}
+                style={styles.watchVideoBtn}
+              >
+                <Text style={styles.watchVideoText}>▶ Watch Video</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Reaction Bar */}
@@ -276,7 +355,7 @@ export default function App() {
                 </Text>
               </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+          </View>
         )}
 
         {/* Story Stream */}
@@ -295,6 +374,9 @@ export default function App() {
                   <Text style={styles.storySource}>{item.source_name}</Text>
                   {item.scope === "local" && (
                     <Text style={styles.localTag}>🇪🇹 Local</Text>
+                  )}
+                  {(item.video_url || item.title?.toLowerCase().includes("video")) && (
+                    <Text style={styles.videoBadgeTag}>▶ Video</Text>
                   )}
                 </View>
                 <Text style={styles.storyHeadline} numberOfLines={3}>
@@ -381,6 +463,68 @@ export default function App() {
           </SafeAreaView>
         </Modal>
       )}
+
+      {/* Video Journalism Player Modal */}
+      {activeVideo && (
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={Boolean(activeVideo)}
+          onRequestClose={() => setActiveVideo(null)}
+        >
+          <View style={styles.videoModalBackdrop}>
+            <View style={styles.videoModalContent}>
+              {/* Top Bar */}
+              <View style={styles.videoTopBar}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={styles.videoRedDot}>●</Text>
+                  <Text style={styles.videoModalHeaderTag}>VIDEO DISPATCH</Text>
+                  <Text style={styles.videoSourceTitle}>· {activeVideo.source_name}</Text>
+                </View>
+                <TouchableOpacity onPress={() => setActiveVideo(null)}>
+                  <Text style={styles.videoCloseBtn}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Video Preview Card */}
+              {activeVideo.image_url ? (
+                <View style={styles.videoPlayerFrame}>
+                  <Image source={{ uri: activeVideo.image_url }} style={styles.videoPlayerImg} />
+                  <View style={styles.videoPlayCircle}>
+                    <Text style={styles.videoPlayIcon}>▶</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              <ScrollView style={{ padding: 14 }}>
+                <Text style={styles.videoHeadline}>{activeVideo.title}</Text>
+
+                {/* 3-Bullet Takeaways */}
+                <View style={styles.videoDigestBox}>
+                  <Text style={styles.videoDigestTitle}>BROADCAST FACTS DIGEST</Text>
+                  {(Array.isArray(activeVideo.summary) && activeVideo.summary.length > 0
+                    ? activeVideo.summary
+                    : ["Televised broadcast filed by regional desk.", "Corroborated across independent outlets."]
+                  ).map((b, i) => (
+                    <Text key={i} style={styles.videoDigestBullet}>
+                      • {b}
+                    </Text>
+                  ))}
+                </View>
+
+                {activeVideo.original_url && (
+                  <TouchableOpacity
+                    onPress={() => Linking.openURL(activeVideo.original_url)}
+                    style={styles.videoExternalBtn}
+                  >
+                    <Text style={styles.videoExternalText}>Watch Full Stream on {activeVideo.source_name} ↗</Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -410,11 +554,27 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
   },
-  editionTag: {
-    fontSize: 9,
-    fontWeight: "bold",
-    color: "#111111",
-    letterSpacing: 1,
+  langToggleRow: {
+    flexDirection: "row",
+    backgroundColor: "#EAE7DF",
+    borderRadius: 12,
+    padding: 2,
+  },
+  langBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  langBtnActive: {
+    backgroundColor: "#111111",
+  },
+  langBtnText: {
+    fontSize: 10,
+    color: "#555",
+    fontWeight: "600",
+  },
+  langBtnTextActive: {
+    color: "#FFF",
   },
   mastheadTitle: {
     fontSize: 32,
@@ -552,11 +712,43 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#E5E2D9",
     marginBottom: 10,
+    position: "relative",
   },
   leadImage: {
     width: "100%",
     height: "100%",
     resizeMode: "cover",
+  },
+  leadVideoOverlay: {
+    position: "absolute",
+    inset: 0,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leadPlayCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
+  },
+  leadPlayArrow: {
+    fontSize: 20,
+    color: "#111",
+    marginLeft: 3,
+  },
+  leadVideoTag: {
+    fontSize: 10,
+    color: "#FFF",
+    fontWeight: "bold",
+    letterSpacing: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
   },
   bulletBox: {
     backgroundColor: "#F2EFEB",
@@ -578,6 +770,30 @@ const styles = StyleSheet.create({
     color: "#222222",
     lineHeight: 18,
     marginBottom: 3,
+  },
+  leadActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+  },
+  readFullText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#111111",
+  },
+  watchVideoBtn: {
+    backgroundColor: "#FFF0F0",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#FFD0D0",
+  },
+  watchVideoText: {
+    fontSize: 11,
+    fontWeight: "bold",
+    color: "#990000",
   },
   reactionRow: {
     flexDirection: "row",
@@ -641,6 +857,15 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: 3,
     color: "#333",
+  },
+  videoBadgeTag: {
+    fontSize: 9,
+    backgroundColor: "#FFF0F0",
+    color: "#990000",
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    fontWeight: "bold",
   },
   storyHeadline: {
     fontSize: 14,
@@ -739,6 +964,120 @@ const styles = StyleSheet.create({
   originalLinkText: {
     color: "#FAF9F6",
     fontSize: 13,
+    fontWeight: "bold",
+  },
+  // Video Modal Styles
+  videoModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    justifyContent: "center",
+    padding: 16,
+  },
+  videoModalContent: {
+    backgroundColor: "#141414",
+    borderRadius: 8,
+    overflow: "hidden",
+    maxHeight: "85%",
+    borderWidth: 1,
+    borderColor: "#2A2A2A",
+  },
+  videoTopBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#1C1C1C",
+    borderBottomWidth: 1,
+    borderBottomColor: "#2A2A2A",
+  },
+  videoRedDot: {
+    color: "#E50914",
+    fontSize: 12,
+  },
+  videoModalHeaderTag: {
+    color: "#E50914",
+    fontSize: 10,
+    fontWeight: "bold",
+    letterSpacing: 1,
+  },
+  videoSourceTitle: {
+    color: "#AAA",
+    fontSize: 11,
+  },
+  videoCloseBtn: {
+    color: "#AAA",
+    fontSize: 16,
+    paddingHorizontal: 4,
+  },
+  videoPlayerFrame: {
+    width: "100%",
+    height: 190,
+    backgroundColor: "#000",
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  videoPlayerImg: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+    opacity: 0.6,
+  },
+  videoPlayCircle: {
+    position: "absolute",
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "rgba(229, 9, 20, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  videoPlayIcon: {
+    color: "#FFF",
+    fontSize: 22,
+    marginLeft: 3,
+  },
+  videoHeadline: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#FAF9F6",
+    lineHeight: 24,
+    marginBottom: 10,
+    fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
+  },
+  videoDigestBox: {
+    backgroundColor: "#1F1F1F",
+    borderLeftWidth: 3,
+    borderLeftColor: "#E50914",
+    padding: 10,
+    borderRadius: 4,
+    marginVertical: 8,
+  },
+  videoDigestTitle: {
+    fontSize: 9,
+    fontWeight: "bold",
+    color: "#AAA",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  videoDigestBullet: {
+    fontSize: 12,
+    color: "#DDD",
+    lineHeight: 18,
+    marginBottom: 3,
+  },
+  videoExternalBtn: {
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 10,
+    borderRadius: 4,
+    alignItems: "center",
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  videoExternalText: {
+    color: "#111",
+    fontSize: 12,
     fontWeight: "bold",
   },
 });

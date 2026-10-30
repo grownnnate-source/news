@@ -7,6 +7,8 @@ export default function Header({
   setActiveScope,
   activeCategory,
   setActiveCategory,
+  activeLanguage = "all",
+  setActiveLanguage,
   categories = []
 }) {
   const [currentDate, setCurrentDate] = useState("Verified Daily Broadsheet Edition");
@@ -27,16 +29,53 @@ export default function Header({
   return (
     <header className="w-full max-w-5xl mx-auto px-4 pt-6 pb-2">
       {/* Top Utility Bar */}
-      <div className="flex items-center justify-between text-xs text-[#555555] uppercase tracking-wider py-1 ink-border-b">
-        <div>
+      <div className="flex flex-wrap items-center justify-between text-xs text-[#555555] uppercase tracking-wider py-1.5 ink-border-b gap-2">
+        <div className="flex items-center space-x-2">
           <span>{currentDate}</span>
-          <span className="mx-2">·</span>
+          <span>·</span>
           <span>Addis Ababa · London · Tokyo</span>
         </div>
+
+        {/* Right Utility: Bilingual Language Selector & Live Feed Indicator */}
         <div className="flex items-center space-x-3">
-          <span className="hidden sm:inline">Edition: <strong>Independent Wire</strong></span>
-          <span>·</span>
-          <span className="text-[#111111] font-semibold">16 Verified Feeds Live</span>
+          {/* 1-Tap Bilingual Switcher */}
+          <div className="flex items-center space-x-1 bg-[#ECEAE4] p-0.5 rounded border border-[#D5D3CC] text-[11px] normal-case">
+            <button
+              onClick={() => setActiveLanguage && setActiveLanguage("all")}
+              className={`px-2 py-0.5 rounded transition-all font-medium ${
+                activeLanguage === "all"
+                  ? "bg-[#111111] text-white font-bold shadow-xs"
+                  : "text-[#555555] hover:text-[#111111]"
+              }`}
+            >
+              All Wires
+            </button>
+            <button
+              onClick={() => setActiveLanguage && setActiveLanguage("am")}
+              className={`px-2 py-0.5 rounded transition-all font-medium ${
+                activeLanguage === "am"
+                  ? "bg-[#111111] text-white font-bold shadow-xs"
+                  : "text-[#555555] hover:text-[#111111]"
+              }`}
+              title="Filter for Amharic local dispatches (BBC Amharic, Tikvah)"
+            >
+              አማርኛ
+            </button>
+            <button
+              onClick={() => setActiveLanguage && setActiveLanguage("en")}
+              className={`px-2 py-0.5 rounded transition-all font-medium ${
+                activeLanguage === "en"
+                  ? "bg-[#111111] text-white font-bold shadow-xs"
+                  : "text-[#555555] hover:text-[#111111]"
+              }`}
+              title="Filter for English broadsheet dispatches"
+            >
+              English
+            </button>
+          </div>
+
+          <span className="hidden sm:inline text-[#777]">·</span>
+          <span className="text-[#111111] font-semibold hidden sm:inline">16 Feeds Live</span>
         </div>
       </div>
 
@@ -46,7 +85,9 @@ export default function Header({
           THREADNEWS
         </h1>
         <p className="text-xs uppercase tracking-[0.25em] text-[#666666] mt-1 font-serif italic">
-          The Verified Regional & Global Dispatch
+          {activeLanguage === "am"
+            ? "የተረጋገጡ የሀገር ውስጥና ዓለም አቀፍ ዜናዎች"
+            : "The Verified Regional & Global Dispatch"}
         </p>
       </div>
 

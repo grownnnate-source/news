@@ -5,6 +5,7 @@ import Header from "../components/Header";
 import LeadStory from "../components/LeadStory";
 import StoryRow from "../components/StoryRow";
 import ReaderModal from "../components/ReaderModal";
+import VideoModal from "../components/VideoModal";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
@@ -16,8 +17,10 @@ export default function HomePage() {
   const [error, setError] = useState(null);
   const [activeScope, setActiveScope] = useState("all");
   const [activeCategory, setActiveCategory] = useState("");
+  const [activeLanguage, setActiveLanguage] = useState("all"); // 'all' | 'am' | 'en'
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStory, setActiveStory] = useState(null);
+  const [activeVideo, setActiveVideo] = useState(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -31,7 +34,7 @@ export default function HomePage() {
 
         const params = new URLSearchParams({
           page: targetPage.toString(),
-          limit: "15",
+          limit: "20",
           scope: activeScope,
         });
 
@@ -57,7 +60,7 @@ export default function HomePage() {
           setArticles(incoming);
         }
 
-        setHasMore(incoming.length === 15);
+        setHasMore(incoming.length === 20);
         setPage(targetPage);
       } catch (err) {
         console.error("[Wire Error] Failed fetching articles:", err);
@@ -111,17 +114,40 @@ export default function HomePage() {
     }
   };
 
-  // Filter articles by search query
+  // Filter articles by language and search query
   const filteredArticles = useMemo(() => {
-    if (!searchQuery.trim()) return articles;
-    const q = searchQuery.toLowerCase();
-    return articles.filter(
-      (a) =>
-        a.title?.toLowerCase().includes(q) ||
-        a.content?.toLowerCase().includes(q) ||
-        a.source_name?.toLowerCase().includes(q)
-    );
-  }, [articles, searchQuery]);
+    let result = articles;
+
+    // 1. Language Filter
+    if (activeLanguage === "am") {
+      result = result.filter(
+        (a) =>
+          /[\u1200-\u137F]/.test(a.title) ||
+          /[\u1200-\u137F]/.test(a.content || "") ||
+          a.source_name?.toLowerCase().includes("amharic") ||
+          a.source_name?.toLowerCase().includes("tikvah")
+      );
+    } else if (activeLanguage === "en") {
+      result = result.filter(
+        (a) =>
+          !/[\u1200-\u137F]/.test(a.title) &&
+          !a.source_name?.toLowerCase().includes("amharic")
+      );
+    }
+
+    // 2. Search Query Filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (a) =>
+          a.title?.toLowerCase().includes(q) ||
+          a.content?.toLowerCase().includes(q) ||
+          a.source_name?.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [articles, activeLanguage, searchQuery]);
 
   // Lead article is the first article with an image or highest velocity
   const leadArticle = filteredArticles[0] || null;
@@ -142,6 +168,8 @@ export default function HomePage() {
         setActiveScope={setActiveScope}
         activeCategory={activeCategory}
         setActiveCategory={setActiveCategory}
+        activeLanguage={activeLanguage}
+        setActiveLanguage={setActiveLanguage}
         categories={CATEGORIES}
       />
 
@@ -173,7 +201,7 @@ export default function HomePage() {
           <div className="flex items-center space-x-4 text-[#666] text-xs">
             <span className="flex items-center space-x-1.5">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
-              <span>Wire Stream: <strong>{articles.length} dispatches loaded</strong></span>
+              <span>Wire Stream: <strong>{filteredArticles.length} dispatches</strong></span>
             </span>
             <button
               onClick={() => {
@@ -221,6 +249,7 @@ export default function HomePage() {
                 article={leadArticle}
                 onOpenReader={setActiveStory}
                 onReact={handleReaction}
+                onWatchVideo={setActiveVideo}
               />
             )}
 
@@ -239,7 +268,7 @@ export default function HomePage() {
 
                 {subsequentArticles.length === 0 ? (
                   <p className="py-8 text-center text-sm text-[#777] font-serif italic">
-                    No additional stories matching your filter.
+                    No dispatches found matching the current filter.
                   </p>
                 ) : (
                   subsequentArticles.map((article) => (
@@ -298,6 +327,30 @@ export default function HomePage() {
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* Video Journalism Spotlight Card */}
+                <div className="bg-[#1C1C1C] text-white p-4 rounded border border-[#333] text-xs space-y-2.5">
+                  <div className="flex items-center justify-between font-serif">
+                    <div className="flex items-center space-x-1.5 font-bold text-red-500">
+                      <span>▶</span>
+                      <span className="uppercase tracking-wider font-mono text-[11px]">Video Dispatch</span>
+                    </div>
+                    <span className="text-[9px] bg-red-600 text-white px-1.5 py-0.2 rounded font-mono">
+                      BROADCAST
+                    </span>
+                  </div>
+                  <p className="text-[#BBB] leading-relaxed">
+                    Watch televised press briefings, international summits, and on-the-ground regional video reports directly in ThreadNews.
+                  </p>
+                  {leadArticle && (
+                    <button
+                      onClick={() => setActiveVideo(leadArticle)}
+                      className="w-full mt-1 py-1.5 bg-white text-[#111] rounded text-[11px] font-semibold hover:bg-[#EEE] transition-colors flex items-center justify-center space-x-1"
+                    >
+                      <span>▶ Open Video Theater</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Boring Report De-Sensationalization Card */}
@@ -370,6 +423,14 @@ export default function HomePage() {
           article={activeStory}
           onClose={() => setActiveStory(null)}
           onReact={handleReaction}
+        />
+      )}
+
+      {/* Video Journalism Player Modal */}
+      {activeVideo && (
+        <VideoModal
+          video={activeVideo}
+          onClose={() => setActiveVideo(null)}
         />
       )}
 
