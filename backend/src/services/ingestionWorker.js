@@ -2,6 +2,7 @@ import { supabase } from "../db/supabase.js";
 import { fetchTelegramChannel } from "./telegramIngest.js";
 import { fetchRssFeed } from "./rssIngest.js";
 import { fetchEnaArticles } from "./enaIngest.js";
+import { generateFactualHeuristicDigest } from "./aiSummarizer.js";
 
 /**
  * Calculates a passive velocity score based on view counts and recency.
@@ -98,12 +99,14 @@ export async function runIngestionWorker() {
       const articlesToUpsert = rawItems.map((item) => {
         const publishedAt = item.publishedAt || new Date().toISOString();
         const velocity = calculateVelocity(item);
+        const summary = generateFactualHeuristicDigest(item.title, item.content);
 
         return {
           source_id: source.id,
           external_id: String(item.externalId || item.id || item.url || item.link),
           title: item.title,
           content: item.content || item.title,
+          summary: summary,
           original_url: item.originalUrl || item.url || item.link,
           image_url: item.imageUrl || null,
           original_image_url: item.imageUrl || null,
