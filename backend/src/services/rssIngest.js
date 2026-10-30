@@ -1,6 +1,7 @@
 import Parser from "rss-parser";
 import axios from "axios";
 import * as cheerio from "cheerio";
+import crypto from "node:crypto";
 import { DEFAULT_CITIES, GLOBAL_FEEDS } from "../config/sources.js";
 
 const rssParser = new Parser({
@@ -33,10 +34,14 @@ export async function fetchRssFeed(feedUrl, limit = 15) {
       const rawText = item["content:encoded"] || item.content || item.contentSnippet || item.summary || "";
       const cleaned = cleanTextSnippet(rawText);
       const imageUrl = item.enclosure?.url || (item.mediaContent?.[0]?.$?.url) || null;
-      const externalId = item.guid || item.id || item.link;
+      const rawExternalId = item.guid || item.id || item.link;
+      const externalId =
+        String(rawExternalId).length > 250
+          ? crypto.createHash("sha256").update(String(rawExternalId)).digest("hex")
+          : String(rawExternalId);
 
       return {
-        externalId: String(externalId),
+        externalId,
         title: item.title ? item.title.trim() : "Untitled",
         content: cleaned,
         originalUrl: item.link || feedUrl,

@@ -18,7 +18,9 @@ const VALID_REACTIONS = ["breaking", "helpful", "insightful", "misleading"];
  */
 router.post("/", async (req, res) => {
   try {
-    const { articleId, reactionType, deviceHash: clientHash } = req.body;
+    const articleId = req.body.articleId || req.body.article_id;
+    const reactionType = req.body.reactionType || req.body.reaction_type;
+    const clientHash = req.body.deviceHash || req.body.device_hash;
 
     if (!articleId) {
       return res.status(400).json({
