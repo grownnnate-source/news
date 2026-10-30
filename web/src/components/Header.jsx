@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 
 export default function Header({
   activeScope,
@@ -9,12 +9,20 @@ export default function Header({
   setActiveCategory,
   categories = []
 }) {
-  const currentDate = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const [currentDate, setCurrentDate] = useState("Verified Daily Broadsheet Edition");
+
+  useEffect(() => {
+    try {
+      setCurrentDate(
+        new Date().toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      );
+    } catch {}
+  }, []);
 
   return (
     <header className="w-full max-w-5xl mx-auto px-4 pt-6 pb-2">
