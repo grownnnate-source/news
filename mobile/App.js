@@ -13,8 +13,48 @@ import {
   TextInput,
   Linking,
   Platform,
-  ActivityIndicator
+  ActivityIndicator,
+  Share,
+  Alert
 } from "react-native";
+
+// Resilient Offline Storage Layer: Uses AsyncStorage if available, with in-memory persistence fallback
+let AsyncStorageModule = null;
+try {
+  AsyncStorageModule = require("@react-native-async-storage/async-storage").default || require("@react-native-async-storage/async-storage");
+} catch (e) {
+  AsyncStorageModule = null;
+}
+
+const memoryStore = new Map();
+const storage = {
+  async get(key) {
+    try {
+      if (AsyncStorageModule?.getItem) {
+        return await AsyncStorageModule.getItem(key);
+      }
+      return memoryStore.get(key) || null;
+    } catch {
+      return memoryStore.get(key) || null;
+    }
+  },
+  async set(key, value) {
+    try {
+      if (AsyncStorageModule?.setItem) {
+        await AsyncStorageModule.setItem(key, value);
+      }
+      memoryStore.set(key, value);
+    } catch {
+      memoryStore.set(key, value);
+    }
+  },
+};
+
+const STORAGE_KEYS = {
+  OFFLINE_FEED: "@threadnews_offline_feed",
+  DARK_MODE: "@threadnews_dark_mode",
+  SAVED_ARTICLES: "@threadnews_saved_articles",
+};
 
 // On Android Emulator localhost is 10.0.2.2; on physical devices use workstation local IP.
 const API_BASE = Platform.OS === "android" ? "http://10.0.2.2:5000" : "http://localhost:5000";
@@ -32,7 +72,79 @@ export default function App() {
   const [activeStory, setActiveStory] = useState(null);
   const [activeVideo, setActiveVideo] = useState(null);
 
-  // Fetch feed from backend
+  // Day 7 Features: Night Mode & Offline Storage & Share Sheet
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [savedArticleIds, setSavedArticleIds] = useState(new Set());
+  const [offlineArticleCount, setOfflineArticleCount] = useState(0);
+
+  // 1. Initialize Night Mode & Saved Articles from Storage on Mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const storedTheme = await storage.get(STORAGE_KEYS.DARK_MODE);
+        if (storedTheme !== null) {
+          setIsDarkMode(storedTheme === "true");
+        }
+        const storedSaved = await storage.get(STORAGE_KEYS.SAVED_ARTICLES);
+        if (storedSaved) {
+          const parsed = JSON.parse(storedSaved);
+          setSavedArticleIds(new Set(parsed));
+        }
+      } catch (err) {
+        console.warn("[Init Storage] Warning:", err.message);
+      }
+    })();
+  }, []);
+
+  // 2. Toggle Night Mode & persist
+  const toggleDarkMode = useCallback(async () => {
+    setIsDarkMode((prev) => {
+      const next = !prev;
+      storage.set(STORAGE_KEYS.DARK_MODE, String(next));
+      return next;
+    });
+  }, []);
+
+  // 3. Toggle Bookmark / Save Article for Offline
+  const toggleSaveArticle = useCallback(async (article) => {
+    if (!article?.id) return;
+    setSavedArticleIds((prev) => {
+      const next = new Set(prev);
+      const articleId = String(article.id);
+      if (next.has(articleId)) {
+        next.delete(articleId);
+      } else {
+        next.add(articleId);
+      }
+      storage.set(STORAGE_KEYS.SAVED_ARTICLES, JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }, []);
+
+  // 4. Native Share Sheet for WhatsApp, Telegram, X & SMS
+  const handleShare = useCallback(async (story) => {
+    if (!story) return;
+    try {
+      const bullets = Array.isArray(story.summary) && story.summary.length > 0
+        ? "\n" + story.summary.map((b) => `• ${b}`).join("\n") + "\n"
+        : "";
+      const source = story.source_name ? ` [${story.source_name}]` : "";
+      const url = story.original_url || "https://threadnews.app";
+
+      const shareMessage = `📰 ${story.title}${source}\n${bullets}\nRead verified dispatch on ThreadNews:\n${url}`;
+
+      await Share.share({
+        title: story.title,
+        message: shareMessage,
+        url: url,
+      });
+    } catch (err) {
+      console.warn("[Native Share] Error displaying share sheet:", err.message);
+    }
+  }, []);
+
+  // 5. Fetch feed from backend with automatic offline caching and offline fallback
   const fetchArticles = useCallback(async () => {
     try {
       const params = new URLSearchParams({
@@ -46,10 +158,34 @@ export default function App() {
       const res = await fetch(`${API_BASE}/api/feed?${params.toString()}`);
       if (res.ok) {
         const json = await res.json();
-        setArticles(json.data || []);
+        const incoming = json.data || [];
+        setArticles(incoming);
+        setIsOfflineMode(false);
+
+        // Cache articles for offline reading
+        if (incoming.length > 0) {
+          storage.set(STORAGE_KEYS.OFFLINE_FEED, JSON.stringify(incoming));
+          setOfflineArticleCount(incoming.length);
+        }
+      } else {
+        throw new Error(`Server returned ${res.status}`);
       }
     } catch (err) {
-      console.warn("[Mobile Wire] Fetch error:", err.message);
+      console.warn("[Mobile Wire] Fetch error, loading offline cache:", err.message);
+      // Fallback: load cached offline articles
+      try {
+        const cachedRaw = await storage.get(STORAGE_KEYS.OFFLINE_FEED);
+        if (cachedRaw) {
+          const cached = JSON.parse(cachedRaw);
+          if (cached && cached.length > 0) {
+            setArticles(cached);
+            setIsOfflineMode(true);
+            setOfflineArticleCount(cached.length);
+          }
+        }
+      } catch (cacheErr) {
+        console.warn("[Offline Cache] Failed to load offline cache:", cacheErr.message);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -138,77 +274,118 @@ export default function App() {
   const leadStory = filteredArticles[0] || null;
   const otherStories = filteredArticles.slice(1);
 
+  // Dynamic Theme Palette: Broadsheet Newsprint vs. Broadsheet Night Mode
+  const theme = {
+    bg: isDarkMode ? "#121214" : "#FAF9F6",
+    cardBg: isDarkMode ? "#1A1A1D" : "#FAF9F6",
+    headerBg: isDarkMode ? "#161619" : "#FAF9F6",
+    textPrimary: isDarkMode ? "#F0EDE6" : "#111111",
+    textSecondary: isDarkMode ? "#9E9E9E" : "#666666",
+    border: isDarkMode ? "#2C2C30" : "#111111",
+    borderLight: isDarkMode ? "#26262B" : "#DDD9CE",
+    rowBorder: isDarkMode ? "#232328" : "#EAE7DF",
+    chipBg: isDarkMode ? "#222227" : "#EAE7DF",
+    chipActiveBg: isDarkMode ? "#FAF9F6" : "#111111",
+    chipActiveText: isDarkMode ? "#111111" : "#FAF9F6",
+    bulletBg: isDarkMode ? "#1E1E22" : "#F2EFEB",
+    bulletBorder: isDarkMode ? "#E50914" : "#111111",
+    bulletText: isDarkMode ? "#E6E2D8" : "#222222",
+    inputBg: isDarkMode ? "#1C1C20" : "#F0EEE8",
+    statusBarStyle: isDarkMode ? "light-content" : "dark-content",
+    modalBg: isDarkMode ? "#131316" : "#FAF9F6",
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FAF9F6" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar barStyle={theme.statusBarStyle} backgroundColor={theme.headerBg} />
 
       {/* Broadsheet Top Utility & Masthead */}
-      <View style={styles.mastheadContainer}>
-        {/* Edition Row with Language Toggle */}
+      <View style={[styles.mastheadContainer, { backgroundColor: theme.headerBg, borderBottomColor: theme.border }]}>
+        {/* Edition Row with Language & Night Mode Toggles */}
         <View style={styles.editionRow}>
-          <Text style={styles.editionText}>
+          <Text style={[styles.editionText, { color: theme.textSecondary }]}>
             {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · WIRE
           </Text>
 
-          {/* 1-Tap Language Toggle */}
-          <View style={styles.langToggleRow}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            {/* 1-Tap Night Mode Toggle */}
             <TouchableOpacity
-              onPress={() => setActiveLanguage("all")}
-              style={[styles.langBtn, activeLanguage === "all" && styles.langBtnActive]}
+              onPress={toggleDarkMode}
+              style={[styles.nightModeBtn, { backgroundColor: theme.chipBg }]}
+              accessibilityLabel="Toggle Night Mode"
             >
-              <Text style={[styles.langBtnText, activeLanguage === "all" && styles.langBtnTextActive]}>
-                All
-              </Text>
+              <Text style={styles.nightModeText}>{isDarkMode ? "☀️ Light" : "🌙 Night"}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setActiveLanguage("am")}
-              style={[styles.langBtn, activeLanguage === "am" && styles.langBtnActive]}
-            >
-              <Text style={[styles.langBtnText, activeLanguage === "am" && styles.langBtnTextActive]}>
-                አማርኛ
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setActiveLanguage("en")}
-              style={[styles.langBtn, activeLanguage === "en" && styles.langBtnActive]}
-            >
-              <Text style={[styles.langBtnText, activeLanguage === "en" && styles.langBtnTextActive]}>
-                EN
-              </Text>
-            </TouchableOpacity>
+
+            {/* 1-Tap Language Toggle */}
+            <View style={[styles.langToggleRow, { backgroundColor: theme.chipBg }]}>
+              <TouchableOpacity
+                onPress={() => setActiveLanguage("all")}
+                style={[styles.langBtn, activeLanguage === "all" && { backgroundColor: theme.chipActiveBg }]}
+              >
+                <Text style={[styles.langBtnText, { color: theme.textSecondary }, activeLanguage === "all" && { color: theme.chipActiveText }]}>
+                  All
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setActiveLanguage("am")}
+                style={[styles.langBtn, activeLanguage === "am" && { backgroundColor: theme.chipActiveBg }]}
+              >
+                <Text style={[styles.langBtnText, { color: theme.textSecondary }, activeLanguage === "am" && { color: theme.chipActiveText }]}>
+                  አማርኛ
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setActiveLanguage("en")}
+                style={[styles.langBtn, activeLanguage === "en" && { backgroundColor: theme.chipActiveBg }]}
+              >
+                <Text style={[styles.langBtnText, { color: theme.textSecondary }, activeLanguage === "en" && { color: theme.chipActiveText }]}>
+                  EN
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
-        <Text style={styles.mastheadTitle}>THREADNEWS</Text>
-        <Text style={styles.mastheadSub}>
+        <Text style={[styles.mastheadTitle, { color: theme.textPrimary }]}>THREADNEWS</Text>
+        <Text style={[styles.mastheadSub, { color: theme.textSecondary }]}>
           {activeLanguage === "am" ? "የተረጋገጡ የሀገር ውስጥና ዓለም አቀፍ ዜናዎች" : "The Regional & Global Dispatch"}
         </Text>
 
+        {/* Offline Mode Banner if network unavailable */}
+        {isOfflineMode && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>
+              ⚡ OFFLINE MODE · Reading {offlineArticleCount} Cached Dispatches Stored on Device
+            </Text>
+          </View>
+        )}
+
         {/* Scope Tabs */}
-        <View style={styles.scopeTabsRow}>
+        <View style={[styles.scopeTabsRow, { backgroundColor: theme.chipBg }]}>
           <TouchableOpacity
             onPress={() => setActiveScope("all")}
-            style={[styles.scopeTab, activeScope === "all" && styles.scopeTabActive]}
+            style={[styles.scopeTab, activeScope === "all" && { backgroundColor: theme.chipActiveBg }]}
           >
-            <Text style={[styles.scopeTabText, activeScope === "all" && styles.scopeTabTextActive]}>
+            <Text style={[styles.scopeTabText, { color: theme.textSecondary }, activeScope === "all" && { color: theme.chipActiveText, fontWeight: "bold" }]}>
               All Desks
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setActiveScope("local")}
-            style={[styles.scopeTab, activeScope === "local" && styles.scopeTabActive]}
+            style={[styles.scopeTab, activeScope === "local" && { backgroundColor: theme.chipActiveBg }]}
           >
-            <Text style={[styles.scopeTabText, activeScope === "local" && styles.scopeTabTextActive]}>
+            <Text style={[styles.scopeTabText, { color: theme.textSecondary }, activeScope === "local" && { color: theme.chipActiveText, fontWeight: "bold" }]}>
               🇪🇹 Addis & Horn
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setActiveScope("global")}
-            style={[styles.scopeTab, activeScope === "global" && styles.scopeTabActive]}
+            style={[styles.scopeTab, activeScope === "global" && { backgroundColor: theme.chipActiveBg }]}
           >
-            <Text style={[styles.scopeTabText, activeScope === "global" && styles.scopeTabTextActive]}>
+            <Text style={[styles.scopeTabText, { color: theme.textSecondary }, activeScope === "global" && { color: theme.chipActiveText, fontWeight: "bold" }]}>
               🌍 Global
             </Text>
           </TouchableOpacity>
@@ -219,17 +396,21 @@ export default function App() {
       <ScrollView
         style={styles.feedScroll}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#111111" />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.textPrimary}
+          />
         }
       >
         {/* Search Bar */}
         <View style={styles.searchBarContainer}>
           <TextInput
             placeholder="Search verified wire dispatches..."
-            placeholderTextColor="#888888"
+            placeholderTextColor={theme.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            style={styles.searchInput}
+            style={[styles.searchInput, { backgroundColor: theme.inputBg, borderColor: theme.borderLight, color: theme.textPrimary }]}
           />
         </View>
 
@@ -241,13 +422,15 @@ export default function App() {
               onPress={() => setActiveCategory(cat)}
               style={[
                 styles.categoryChip,
-                activeCategory === cat && styles.categoryChipActive,
+                { backgroundColor: theme.chipBg },
+                activeCategory === cat && { backgroundColor: theme.chipActiveBg },
               ]}
             >
               <Text
                 style={[
                   styles.categoryChipText,
-                  activeCategory === cat && styles.categoryChipTextActive,
+                  { color: theme.textSecondary },
+                  activeCategory === cat && { color: theme.chipActiveText, fontWeight: "bold" },
                 ]}
               >
                 {cat}
@@ -259,16 +442,21 @@ export default function App() {
         {/* Loading Indicator */}
         {loading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#111111" />
-            <Text style={styles.loadingText}>Syncing verified dispatches...</Text>
+            <ActivityIndicator size="small" color={theme.textPrimary} />
+            <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Syncing verified dispatches...</Text>
           </View>
         )}
 
         {/* Lead Story Card */}
         {leadStory && !loading && (
-          <View style={styles.leadCard}>
+          <View style={[styles.leadCard, { borderBottomColor: theme.borderLight }]}>
             <View style={styles.badgeRow}>
-              <Text style={styles.sourceTag}>{leadStory.source_name}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={styles.sourceTag}>{leadStory.source_name}</Text>
+                {savedArticleIds.has(String(leadStory.id)) && (
+                  <Text style={styles.offlineSavedTag}>💾 Stored Offline</Text>
+                )}
+              </View>
               <Text style={styles.verifiedBadge}>✓ Cross-Checked</Text>
             </View>
 
@@ -276,7 +464,7 @@ export default function App() {
               activeOpacity={0.85}
               onPress={() => setActiveStory(leadStory)}
             >
-              <Text style={styles.leadTitle}>{leadStory.title}</Text>
+              <Text style={[styles.leadTitle, { color: theme.textPrimary }]}>{leadStory.title}</Text>
             </TouchableOpacity>
 
             {leadStory.image_url ? (
@@ -297,8 +485,8 @@ export default function App() {
             ) : null}
 
             {/* 3-Bullet Factual Takeaways */}
-            <View style={styles.bulletBox}>
-              <Text style={styles.bulletBoxHeader}>EDITORIAL DIGEST (3 KEY FACTS)</Text>
+            <View style={[styles.bulletBox, { backgroundColor: theme.bulletBg, borderLeftColor: theme.bulletBorder }]}>
+              <Text style={[styles.bulletBoxHeader, { color: theme.textSecondary }]}>EDITORIAL DIGEST (3 KEY FACTS)</Text>
               {(Array.isArray(leadStory.summary) && leadStory.summary.length > 0
                 ? leadStory.summary
                 : [
@@ -307,50 +495,71 @@ export default function App() {
                     "No conflicting discrepancies reported at filing time."
                   ]
               ).map((bullet, idx) => (
-                <Text key={idx} style={styles.bulletText}>
+                <Text key={idx} style={[styles.bulletText, { color: theme.bulletText }]}>
                   • {bullet}
                 </Text>
               ))}
             </View>
 
-            {/* Action Bar */}
+            {/* Action Bar: Reader Mode, Video, Save Offline & Native Share */}
             <View style={styles.leadActionRow}>
               <TouchableOpacity onPress={() => setActiveStory(leadStory)}>
-                <Text style={styles.readFullText}>Read Ad-Free Story →</Text>
+                <Text style={[styles.readFullText, { color: theme.textPrimary }]}>Read Ad-Free Story →</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setActiveVideo(leadStory)}
-                style={styles.watchVideoBtn}
-              >
-                <Text style={styles.watchVideoText}>▶ Watch Video</Text>
-              </TouchableOpacity>
+
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                {/* Save Offline Button */}
+                <TouchableOpacity
+                  onPress={() => toggleSaveArticle(leadStory)}
+                  style={[styles.utilityBtn, { backgroundColor: theme.chipBg, borderColor: theme.borderLight }]}
+                >
+                  <Text style={[styles.utilityBtnText, { color: theme.textPrimary }]}>
+                    {savedArticleIds.has(String(leadStory.id)) ? "✓ Saved" : "💾 Offline"}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Native Share Button */}
+                <TouchableOpacity
+                  onPress={() => handleShare(leadStory)}
+                  style={[styles.utilityBtn, { backgroundColor: theme.chipBg, borderColor: theme.borderLight }]}
+                >
+                  <Text style={[styles.utilityBtnText, { color: theme.textPrimary }]}>📤 Share</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setActiveVideo(leadStory)}
+                  style={styles.watchVideoBtn}
+                >
+                  <Text style={styles.watchVideoText}>▶ Watch Video</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Reaction Bar */}
             <View style={styles.reactionRow}>
               <TouchableOpacity
                 onPress={() => handleReact(leadStory.id, "breaking")}
-                style={styles.reactionBtn}
+                style={[styles.reactionBtn, { backgroundColor: theme.cardBg, borderColor: theme.borderLight }]}
               >
-                <Text style={styles.reactionBtnText}>🔥 {leadStory.count_breaking || 0}</Text>
+                <Text style={[styles.reactionBtnText, { color: theme.textPrimary }]}>🔥 {leadStory.count_breaking || 0}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => handleReact(leadStory.id, "helpful")}
-                style={styles.reactionBtn}
+                style={[styles.reactionBtn, { backgroundColor: theme.cardBg, borderColor: theme.borderLight }]}
               >
-                <Text style={styles.reactionBtnText}>👍 {leadStory.count_helpful || 0}</Text>
+                <Text style={[styles.reactionBtnText, { color: theme.textPrimary }]}>👍 {leadStory.count_helpful || 0}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => handleReact(leadStory.id, "insightful")}
-                style={styles.reactionBtn}
+                style={[styles.reactionBtn, { backgroundColor: theme.cardBg, borderColor: theme.borderLight }]}
               >
-                <Text style={styles.reactionBtnText}>💡 {leadStory.count_insightful || 0}</Text>
+                <Text style={[styles.reactionBtnText, { color: theme.textPrimary }]}>💡 {leadStory.count_insightful || 0}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => handleReact(leadStory.id, "misleading")}
-                style={styles.reactionBtn}
+                style={[styles.reactionBtn, { backgroundColor: theme.cardBg, borderColor: theme.borderLight }]}
               >
-                <Text style={[styles.reactionBtnText, { color: "#990000" }]}>
+                <Text style={[styles.reactionBtnText, { color: "#E50914" }]}>
                   ⚠️ {leadStory.count_misleading || 0}
                 </Text>
               </TouchableOpacity>
@@ -360,33 +569,47 @@ export default function App() {
 
         {/* Story Stream */}
         <View style={styles.streamContainer}>
-          <Text style={styles.streamSectionHeader}>THE CONTINUOUS WIRE</Text>
+          <Text style={[styles.streamSectionHeader, { color: theme.textSecondary, borderBottomColor: theme.border }]}>
+            THE CONTINUOUS WIRE
+          </Text>
 
           {otherStories.map((item) => (
             <TouchableOpacity
               key={item.id}
               activeOpacity={0.8}
               onPress={() => setActiveStory(item)}
-              style={styles.storyRow}
+              style={[styles.storyRow, { borderBottomColor: theme.rowBorder }]}
             >
               <View style={styles.storyTextCol}>
                 <View style={styles.storyMetaRow}>
                   <Text style={styles.storySource}>{item.source_name}</Text>
                   {item.scope === "local" && (
-                    <Text style={styles.localTag}>🇪🇹 Local</Text>
+                    <Text style={[styles.localTag, { backgroundColor: theme.chipBg, color: theme.textPrimary }]}>🇪🇹 Local</Text>
+                  )}
+                  {savedArticleIds.has(String(item.id)) && (
+                    <Text style={styles.offlineSavedTag}>💾 Stored</Text>
                   )}
                   {(item.video_url || item.title?.toLowerCase().includes("video")) && (
                     <Text style={styles.videoBadgeTag}>▶ Video</Text>
                   )}
                 </View>
-                <Text style={styles.storyHeadline} numberOfLines={3}>
+                <Text style={[styles.storyHeadline, { color: theme.textPrimary }]} numberOfLines={3}>
                   {item.title}
                 </Text>
 
                 <View style={styles.microReactionRow}>
-                  <Text style={styles.microBtn}>🔥 {item.count_breaking || 0}</Text>
-                  <Text style={styles.microBtn}>👍 {item.count_helpful || 0}</Text>
-                  <Text style={styles.microBtn}>💡 {item.count_insightful || 0}</Text>
+                  <Text style={[styles.microBtn, { color: theme.textSecondary }]}>🔥 {item.count_breaking || 0}</Text>
+                  <Text style={[styles.microBtn, { color: theme.textSecondary }]}>👍 {item.count_helpful || 0}</Text>
+                  <Text style={[styles.microBtn, { color: theme.textSecondary }]}>💡 {item.count_insightful || 0}</Text>
+
+                  {/* 1-Tap Share Icon */}
+                  <TouchableOpacity
+                    onPress={() => handleShare(item)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={{ marginLeft: "auto" }}
+                  >
+                    <Text style={[styles.microBtn, { color: theme.textPrimary, fontWeight: "600" }]}>📤 Share</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -408,25 +631,55 @@ export default function App() {
           visible={Boolean(activeStory)}
           onRequestClose={() => setActiveStory(null)}
         >
-          <SafeAreaView style={styles.modalContainer}>
+          <SafeAreaView style={[styles.modalContainer, { backgroundColor: theme.modalBg }]}>
             {/* Modal Header */}
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, { backgroundColor: theme.headerBg, borderBottomColor: theme.borderLight }]}>
               <TouchableOpacity onPress={() => setActiveStory(null)}>
-                <Text style={styles.modalCloseText}>← Back to Wire</Text>
+                <Text style={[styles.modalCloseText, { color: theme.textPrimary }]}>← Back to Wire</Text>
               </TouchableOpacity>
-              <Text style={styles.modalSourceText}>{activeStory.source_name}</Text>
+
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                {/* Save Offline inside Reader */}
+                <TouchableOpacity
+                  onPress={() => toggleSaveArticle(activeStory)}
+                  style={[styles.modalHeaderBtn, { backgroundColor: theme.chipBg }]}
+                >
+                  <Text style={[styles.modalHeaderBtnText, { color: theme.textPrimary }]}>
+                    {savedArticleIds.has(String(activeStory.id)) ? "✓ Saved" : "💾 Save Offline"}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Share inside Reader */}
+                <TouchableOpacity
+                  onPress={() => handleShare(activeStory)}
+                  style={[styles.modalHeaderBtn, { backgroundColor: theme.chipBg }]}
+                >
+                  <Text style={[styles.modalHeaderBtnText, { color: theme.textPrimary }]}>📤 Share</Text>
+                </TouchableOpacity>
+
+                {/* Night Mode Toggle inside Reader */}
+                <TouchableOpacity
+                  onPress={toggleDarkMode}
+                  style={[styles.modalHeaderBtn, { backgroundColor: theme.chipBg }]}
+                >
+                  <Text style={[styles.modalHeaderBtnText, { color: theme.textPrimary }]}>
+                    {isDarkMode ? "☀️" : "🌙"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <ScrollView style={styles.modalContent}>
-              <Text style={styles.modalTitle}>{activeStory.title}</Text>
+              <Text style={[styles.modalSourceText, { color: theme.textSecondary }]}>{activeStory.source_name}</Text>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>{activeStory.title}</Text>
 
               {activeStory.image_url ? (
                 <Image source={{ uri: activeStory.image_url }} style={styles.modalImage} />
               ) : null}
 
               {/* 3-Bullet Takeaway */}
-              <View style={styles.modalBulletBox}>
-                <Text style={styles.bulletBoxHeader}>KEY FACTS SUMMARY</Text>
+              <View style={[styles.modalBulletBox, { backgroundColor: theme.bulletBg, borderLeftColor: theme.bulletBorder }]}>
+                <Text style={[styles.bulletBoxHeader, { color: theme.textSecondary }]}>KEY FACTS SUMMARY</Text>
                 {(Array.isArray(activeStory.summary) && activeStory.summary.length > 0
                   ? activeStory.summary
                   : [
@@ -435,28 +688,41 @@ export default function App() {
                       "Official updates will follow as received."
                     ]
                 ).map((b, i) => (
-                  <Text key={i} style={styles.modalBulletText}>
+                  <Text key={i} style={[styles.modalBulletText, { color: theme.bulletText }]}>
                     • {b}
                   </Text>
                 ))}
               </View>
 
               {/* Article Content */}
-              <Text style={styles.modalBodyText}>
+              <Text style={[styles.modalBodyText, { color: theme.textPrimary }]}>
                 {activeStory.content || "Full article text available at the original publication."}
               </Text>
 
-              {/* Publisher Link */}
-              <TouchableOpacity
-                onPress={() => {
-                  if (activeStory.original_url) {
-                    Linking.openURL(activeStory.original_url);
-                  }
-                }}
-                style={styles.originalLinkBtn}
-              >
-                <Text style={styles.originalLinkText}>Open Original Source Dispatch ↗</Text>
-              </TouchableOpacity>
+              {/* Publisher Link & Native Share Bar */}
+              <View style={{ gap: 10, marginTop: 10 }}>
+                <TouchableOpacity
+                  onPress={() => handleShare(activeStory)}
+                  style={[styles.shareActionBtn, { backgroundColor: theme.chipBg, borderColor: theme.borderLight }]}
+                >
+                  <Text style={[styles.shareActionText, { color: theme.textPrimary }]}>
+                    📤 Share Story with Contacts (WhatsApp / Telegram)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    if (activeStory.original_url) {
+                      Linking.openURL(activeStory.original_url);
+                    }
+                  }}
+                  style={[styles.originalLinkBtn, { backgroundColor: theme.chipActiveBg }]}
+                >
+                  <Text style={[styles.originalLinkText, { color: theme.chipActiveText }]}>
+                    Open Original Source Dispatch ↗
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
               <View style={{ height: 60 }} />
             </ScrollView>
@@ -512,14 +778,24 @@ export default function App() {
                   ))}
                 </View>
 
-                {activeVideo.original_url && (
+                {/* Video Share & External Watch Button */}
+                <View style={{ gap: 8, marginTop: 10 }}>
                   <TouchableOpacity
-                    onPress={() => Linking.openURL(activeVideo.original_url)}
-                    style={styles.videoExternalBtn}
+                    onPress={() => handleShare(activeVideo)}
+                    style={[styles.videoShareBtn]}
                   >
-                    <Text style={styles.videoExternalText}>Watch Full Stream on {activeVideo.source_name} ↗</Text>
+                    <Text style={styles.videoShareText}>📤 Share Video Dispatch</Text>
                   </TouchableOpacity>
-                )}
+
+                  {activeVideo.original_url && (
+                    <TouchableOpacity
+                      onPress={() => Linking.openURL(activeVideo.original_url)}
+                      style={styles.videoExternalBtn}
+                    >
+                      <Text style={styles.videoExternalText}>Watch Full Stream on {activeVideo.source_name} ↗</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </ScrollView>
             </View>
           </View>
@@ -532,15 +808,12 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAF9F6",
   },
   mastheadContainer: {
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#111111",
-    backgroundColor: "#FAF9F6",
   },
   editionRow: {
     flexDirection: "row",
@@ -550,13 +823,20 @@ const styles = StyleSheet.create({
   },
   editionText: {
     fontSize: 10,
-    color: "#666666",
     letterSpacing: 0.5,
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
   },
+  nightModeBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  nightModeText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
   langToggleRow: {
     flexDirection: "row",
-    backgroundColor: "#EAE7DF",
     borderRadius: 12,
     padding: 2,
   },
@@ -565,22 +845,14 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 10,
   },
-  langBtnActive: {
-    backgroundColor: "#111111",
-  },
   langBtnText: {
     fontSize: 10,
-    color: "#555",
     fontWeight: "600",
-  },
-  langBtnTextActive: {
-    color: "#FFF",
   },
   mastheadTitle: {
     fontSize: 32,
     fontWeight: "bold",
     textAlign: "center",
-    color: "#111111",
     letterSpacing: -0.5,
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
   },
@@ -588,14 +860,35 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontStyle: "italic",
     textAlign: "center",
-    color: "#777777",
     letterSpacing: 1,
     marginBottom: 8,
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
   },
+  offlineBanner: {
+    backgroundColor: "#B45309",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    marginBottom: 6,
+    alignItems: "center",
+  },
+  offlineBannerText: {
+    color: "#FFF",
+    fontSize: 10,
+    fontWeight: "bold",
+    letterSpacing: 0.5,
+  },
+  offlineSavedTag: {
+    fontSize: 9,
+    backgroundColor: "#059669",
+    color: "#FFFFFF",
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+    fontWeight: "bold",
+  },
   scopeTabsRow: {
     flexDirection: "row",
-    backgroundColor: "#EAE7DF",
     borderRadius: 6,
     padding: 3,
     marginTop: 4,
@@ -606,17 +899,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 4,
   },
-  scopeTabActive: {
-    backgroundColor: "#111111",
-  },
   scopeTabText: {
     fontSize: 11,
-    color: "#555555",
-    fontWeight: "500",
-  },
-  scopeTabTextActive: {
-    color: "#FAF9F6",
-    fontWeight: "bold",
   },
   feedScroll: {
     flex: 1,
@@ -626,14 +910,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   searchInput: {
-    backgroundColor: "#F0EEE8",
     borderWidth: 1,
-    borderColor: "#DDD9CE",
     borderRadius: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
     fontSize: 12,
-    color: "#111111",
   },
   categoriesBar: {
     paddingHorizontal: 16,
@@ -643,19 +924,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 14,
-    backgroundColor: "#EAE7DF",
     marginRight: 8,
-  },
-  categoryChipActive: {
-    backgroundColor: "#111111",
   },
   categoryChipText: {
     fontSize: 11,
-    color: "#444444",
-  },
-  categoryChipTextActive: {
-    color: "#FAF9F6",
-    fontWeight: "bold",
   },
   loadingContainer: {
     padding: 30,
@@ -663,7 +935,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 12,
-    color: "#777777",
     marginTop: 8,
     fontStyle: "italic",
   },
@@ -672,7 +943,6 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#D8D4C8",
   },
   badgeRow: {
     flexDirection: "row",
@@ -683,14 +953,14 @@ const styles = StyleSheet.create({
   sourceTag: {
     fontSize: 11,
     fontWeight: "bold",
-    color: "#990000",
+    color: "#DC2626",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   verifiedBadge: {
     fontSize: 10,
-    color: "#1E5631",
-    backgroundColor: "#E8F5E9",
+    color: "#065F46",
+    backgroundColor: "#D1FAE5",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 10,
@@ -700,7 +970,6 @@ const styles = StyleSheet.create({
   leadTitle: {
     fontSize: 22,
     fontWeight: "bold",
-    color: "#111111",
     lineHeight: 28,
     marginBottom: 10,
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
@@ -710,7 +979,7 @@ const styles = StyleSheet.create({
     height: 180,
     borderRadius: 6,
     overflow: "hidden",
-    backgroundColor: "#E5E2D9",
+    backgroundColor: "#333",
     marginBottom: 10,
     position: "relative",
   },
@@ -751,9 +1020,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   bulletBox: {
-    backgroundColor: "#F2EFEB",
     borderLeftWidth: 3,
-    borderLeftColor: "#111111",
     padding: 10,
     borderRadius: 4,
     marginVertical: 8,
@@ -761,13 +1028,11 @@ const styles = StyleSheet.create({
   bulletBoxHeader: {
     fontSize: 10,
     fontWeight: "bold",
-    color: "#333333",
     letterSpacing: 0.8,
     marginBottom: 4,
   },
   bulletText: {
     fontSize: 12,
-    color: "#222222",
     lineHeight: 18,
     marginBottom: 3,
   },
@@ -776,24 +1041,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 6,
+    flexWrap: "wrap",
+    gap: 8,
   },
   readFullText: {
     fontSize: 12,
     fontWeight: "bold",
-    color: "#111111",
+  },
+  utilityBtn: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  utilityBtnText: {
+    fontSize: 10,
+    fontWeight: "600",
   },
   watchVideoBtn: {
-    backgroundColor: "#FFF0F0",
+    backgroundColor: "#FEE2E2",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#FFD0D0",
+    borderColor: "#FECACA",
   },
   watchVideoText: {
     fontSize: 11,
     fontWeight: "bold",
-    color: "#990000",
+    color: "#DC2626",
   },
   reactionRow: {
     flexDirection: "row",
@@ -806,12 +1082,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#DDD9CE",
-    backgroundColor: "#FFFFFF",
   },
   reactionBtnText: {
     fontSize: 11,
-    color: "#333333",
   },
   streamContainer: {
     paddingHorizontal: 16,
@@ -820,11 +1093,9 @@ const styles = StyleSheet.create({
   streamSectionHeader: {
     fontSize: 11,
     fontWeight: "bold",
-    color: "#666666",
     letterSpacing: 1,
     marginBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#111111",
     paddingBottom: 4,
   },
   storyRow: {
@@ -832,7 +1103,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#EAE7DF",
   },
   storyTextCol: {
     flex: 1,
@@ -847,21 +1117,19 @@ const styles = StyleSheet.create({
   storySource: {
     fontSize: 10,
     fontWeight: "bold",
-    color: "#333333",
+    color: "#DC2626",
     textTransform: "uppercase",
   },
   localTag: {
     fontSize: 9,
-    backgroundColor: "#EAE7DF",
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 3,
-    color: "#333",
   },
   videoBadgeTag: {
     fontSize: 9,
-    backgroundColor: "#FFF0F0",
-    color: "#990000",
+    backgroundColor: "#FEE2E2",
+    color: "#DC2626",
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 3,
@@ -870,28 +1138,26 @@ const styles = StyleSheet.create({
   storyHeadline: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#111111",
     lineHeight: 19,
     marginBottom: 6,
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
   },
   microReactionRow: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   microBtn: {
     fontSize: 10,
-    color: "#777777",
   },
   storyThumb: {
     width: 64,
     height: 64,
     borderRadius: 4,
-    backgroundColor: "#EAE7DF",
+    backgroundColor: "#333",
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: "#FAF9F6",
   },
   modalHeader: {
     flexDirection: "row",
@@ -900,29 +1166,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#DDD9CE",
-    backgroundColor: "#FAF9F6",
   },
   modalCloseText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#111111",
   },
-  modalSourceText: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#666666",
-    textTransform: "uppercase",
+  modalHeaderBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  modalHeaderBtnText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
   modalContent: {
     flex: 1,
     paddingHorizontal: 18,
     paddingTop: 16,
   },
+  modalSourceText: {
+    fontSize: 11,
+    fontWeight: "bold",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
   modalTitle: {
     fontSize: 26,
     fontWeight: "bold",
-    color: "#111111",
     lineHeight: 32,
     marginBottom: 14,
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
@@ -934,52 +1206,55 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   modalBulletBox: {
-    backgroundColor: "#F2EFEB",
     borderLeftWidth: 3,
-    borderLeftColor: "#111111",
     padding: 12,
     borderRadius: 4,
     marginBottom: 16,
   },
   modalBulletText: {
     fontSize: 13,
-    color: "#222222",
     lineHeight: 20,
     marginBottom: 4,
   },
   modalBodyText: {
     fontSize: 16,
-    color: "#222222",
     lineHeight: 25,
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
     marginBottom: 20,
   },
+  shareActionBtn: {
+    borderWidth: 1,
+    paddingVertical: 11,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  shareActionText: {
+    fontSize: 12,
+    fontWeight: "bold",
+  },
   originalLinkBtn: {
-    backgroundColor: "#111111",
     paddingVertical: 12,
     borderRadius: 6,
     alignItems: "center",
-    marginTop: 10,
   },
   originalLinkText: {
-    color: "#FAF9F6",
     fontSize: 13,
     fontWeight: "bold",
   },
   // Video Modal Styles
   videoModalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.85)",
+    backgroundColor: "rgba(0,0,0,0.88)",
     justifyContent: "center",
     padding: 16,
   },
   videoModalContent: {
-    backgroundColor: "#141414",
+    backgroundColor: "#141416",
     borderRadius: 8,
     overflow: "hidden",
     maxHeight: "85%",
     borderWidth: 1,
-    borderColor: "#2A2A2A",
+    borderColor: "#2A2A2E",
   },
   videoTopBar: {
     flexDirection: "row",
@@ -987,9 +1262,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: "#1C1C1C",
+    backgroundColor: "#1C1C20",
     borderBottomWidth: 1,
-    borderBottomColor: "#2A2A2A",
+    borderBottomColor: "#2A2A2E",
   },
   videoRedDot: {
     color: "#E50914",
@@ -1047,7 +1322,7 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
   },
   videoDigestBox: {
-    backgroundColor: "#1F1F1F",
+    backgroundColor: "#1E1E22",
     borderLeftWidth: 3,
     borderLeftColor: "#E50914",
     padding: 10,
@@ -1067,13 +1342,22 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 3,
   },
+  videoShareBtn: {
+    backgroundColor: "#26262B",
+    paddingVertical: 10,
+    borderRadius: 4,
+    alignItems: "center",
+  },
+  videoShareText: {
+    color: "#FFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
   videoExternalBtn: {
     backgroundColor: "#FFFFFF",
     paddingVertical: 10,
     borderRadius: 4,
     alignItems: "center",
-    marginTop: 12,
-    marginBottom: 8,
   },
   videoExternalText: {
     color: "#111",

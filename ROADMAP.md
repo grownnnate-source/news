@@ -24,8 +24,8 @@
 - [x] **Day 1**: Ingestion Engine verified with live local & global articles.
 - [x] **Day 2**: Express API server running with `/api/feed`, `/api/articles/:id/reader`, and `/api/reactions`.
 - [x] **Day 3**: Supabase database connected and background 15-minute sync scheduler active.
-- [ ] **Day 4**: Web client displaying live news cards.
-- [ ] **Day 5**: Reader mode with clean typography & instant reactions.
-- [ ] **Day 6**: Mobile app running smoothly on Expo Go.
-- [ ] **Day 7**: Offline caching working on device.
+- [x] **Day 4**: Web client displaying live news cards.
+- [x] **Day 5**: Reader mode with clean typography & instant reactions.
+- [x] **Day 6**: Mobile app running smoothly on Expo Go.
+- [x] **Day 7**: Offline caching working on device & native share sheet.
 - [ ] **Day 8**: AI 3-bullet summaries active & production URLs live.
