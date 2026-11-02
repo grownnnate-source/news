@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import { supabase } from "./db/supabase.js";
 import feedRouter from "./routes/feed.js";
 import articlesRouter from "./routes/articles.js";
 import reactionsRouter from "./routes/reactions.js";
@@ -27,12 +28,23 @@ app.use((req, res, next) => {
   next();
 });
 
-// Health check endpoint
-app.get("/api/health", (req, res) => {
+// Health check endpoints for Render, Vercel & monitoring
+app.get(["/health", "/api/health"], async (req, res) => {
+  let dbStatus = "unknown";
+  try {
+    const { error } = await supabase.from("sources").select("id").limit(1);
+    dbStatus = error ? `error: ${error.message}` : "connected";
+  } catch (e) {
+    dbStatus = `unreachable: ${e.message}`;
+  }
+
   res.json({
     status: "ok",
     service: "ThreadNews API Gateway",
     version: "1.0.0",
+    database: dbStatus,
+    aiEngine: process.env.GEMINI_API_KEY ? "gemini-1.5-flash" : "heuristic-digest",
+    environment: process.env.NODE_ENV || "development",
     timestamp: new Date().toISOString()
   });
 });

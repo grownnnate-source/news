@@ -29,6 +29,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# System
+# System & Agent tooling
 .DS_Store
 Thumbs.db
+.mcp.json
+.agentsroom/
+.claude/
+.agents/

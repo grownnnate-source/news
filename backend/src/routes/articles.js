@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { supabase } from "../db/supabase.js";
+import { generate3BulletDigest } from "../services/aiSummarizer.js";
 
 const router = Router();
 
@@ -101,6 +102,52 @@ router.get("/:id/reader", async (req, res) => {
     return res.status(500).json({
       success: false,
       error: "Failed to generate reader mode",
+      details: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/articles/:id/summarize
+ * Generates an objective, 3-bullet factual digest using Gemini 1.5 Flash (with fallback),
+ * saves it into Supabase, and returns the bullets.
+ */
+router.post("/:id/summarize", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data: article, error } = await supabase
+      .from("articles")
+      .select("id, title, content, summary")
+      .eq("id", id)
+      .single();
+
+    if (error || !article) {
+      return res.status(404).json({
+        success: false,
+        error: "Article not found"
+      });
+    }
+
+    const summary = await generate3BulletDigest(article.title, article.content);
+
+    // Persist generated summary into database
+    await supabase
+      .from("articles")
+      .update({ summary })
+      .eq("id", id);
+
+    return res.json({
+      success: true,
+      articleId: id,
+      engine: process.env.GEMINI_API_KEY ? "gemini-1.5-flash" : "factual-heuristic",
+      summary
+    });
+  } catch (error) {
+    console.error("[API Error] Summarization failed:", error.message);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to generate AI summary",
       details: error.message
     });
   }

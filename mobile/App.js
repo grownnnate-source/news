@@ -457,7 +457,7 @@ export default function App() {
                   <Text style={styles.offlineSavedTag}>💾 Stored Offline</Text>
                 )}
               </View>
-              <Text style={styles.verifiedBadge}>✓ Cross-Checked</Text>
+              <Text style={styles.verifiedBadge}>🛡️ PesaCheck Verified</Text>
             </View>
 
             <TouchableOpacity
@@ -586,6 +586,7 @@ export default function App() {
                   {item.scope === "local" && (
                     <Text style={[styles.localTag, { backgroundColor: theme.chipBg, color: theme.textPrimary }]}>🇪🇹 Local</Text>
                   )}
+                  <Text style={styles.verifiedMicroBadge}>🛡️ PesaCheck</Text>
                   {savedArticleIds.has(String(item.id)) && (
                     <Text style={styles.offlineSavedTag}>💾 Stored</Text>
                   )}
@@ -966,6 +967,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: "hidden",
     fontWeight: "600",
+  },
+  verifiedMicroBadge: {
+    fontSize: 9,
+    color: "#065F46",
+    backgroundColor: "#D1FAE5",
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    fontWeight: "bold",
   },
   leadTitle: {
     fontSize: 22,

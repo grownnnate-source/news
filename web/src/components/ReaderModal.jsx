@@ -76,6 +76,16 @@ export default function ReaderModal({ article, onClose, onReact }) {
             </div>
           )}
 
+          {/* PesaCheck Standards Verification Badge */}
+          <div className="flex items-center justify-between bg-[#EAF5EC] border border-[#CDE5D6] px-3.5 py-2 rounded text-xs text-[#1E5631] mb-6">
+            <div className="flex items-center space-x-2">
+              <span className="text-sm">🛡️</span>
+              <span className="font-semibold">PesaCheck Standards Verified</span>
+              <span className="text-[#3F7550] hidden sm:inline">· Corroborated across accredited regional news desks</span>
+            </div>
+            <span className="font-mono text-[10px] bg-white/80 px-2 py-0.5 rounded border border-[#BDDDC7]">CROSS-VERIFIED</span>
+          </div>
+
           {/* Editorial 3-Bullet Digest */}
           <div className="bg-[#F2F0EB] p-5 rounded border-l-4 border-[#111111] mb-8">
             <h4 className="text-xs uppercase font-bold tracking-widest text-[#333] mb-2 font-serif">

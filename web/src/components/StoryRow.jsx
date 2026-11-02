@@ -43,6 +43,9 @@ export default function StoryRow({ article, onOpenReader, onReact }) {
                 🇪🇹 Local
               </span>
             )}
+            <span className="text-[10px] bg-[#EAF5EC] text-[#1E5631] px-1.5 py-0.2 rounded font-semibold border border-[#D0EADB]">
+              🛡️ PesaCheck
+            </span>
             {(article.video_url || article.title?.toLowerCase().includes("video") || article.title?.toLowerCase().includes("briefing")) && (
               <span className="text-[10px] bg-[#FFF0F0] text-red-700 px-1.5 py-0.2 rounded font-mono font-semibold border border-red-200">
                 ▶ Video

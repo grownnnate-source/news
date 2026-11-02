@@ -28,4 +28,4 @@
 - [x] **Day 5**: Reader mode with clean typography & instant reactions.
 - [x] **Day 6**: Mobile app running smoothly on Expo Go.
 - [x] **Day 7**: Offline caching working on device & native share sheet.
-- [ ] **Day 8**: AI 3-bullet summaries active & production URLs live.
+- [x] **Day 8**: AI 3-bullet summaries active & production URLs live.
