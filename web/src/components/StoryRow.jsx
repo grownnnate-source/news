@@ -19,6 +19,18 @@ export default function StoryRow({ article, onOpenReader, onReact }) {
     }
   })();
 
+  // 1-2 sentence concise summary teaser
+  const summaryTeaser = (() => {
+    if (Array.isArray(article.summary) && article.summary.length > 0) {
+      return article.summary[0];
+    }
+    if (article.content) {
+      const sentence = article.content.split(/(?<=[.?!])\s+/)[0] || "";
+      return sentence.length > 15 ? sentence : article.content.slice(0, 140) + "...";
+    }
+    return "Dispatch filed by desk correspondents.";
+  })();
+
   const hasHighMisleading = (article.count_misleading || 0) > 3;
 
   const handleShare = async (e) => {
@@ -47,109 +59,100 @@ export default function StoryRow({ article, onOpenReader, onReact }) {
   };
 
   return (
-    <article className="py-3.5 sm:py-4 ink-border-b group transition-colors hover:bg-[#F7F5EE]/60 dark:hover:bg-[#1A1A22]/60 px-2 rounded">
-      <div className="flex items-start justify-between gap-3 sm:gap-4">
-        {/* Left: Metadata, Headline, Snippet & Reactions */}
+    <article className="py-4 hairline-b group transition-colors hover:bg-[#F9F8F6]/60 dark:hover:bg-[#181820]/60 px-1 sm:px-2 rounded-xs">
+      <div className="flex items-start justify-between gap-3 sm:gap-5">
+        {/* Left: Kicker, Headline in Serif, Summary in Sans-Serif, Read More link */}
         <div className="flex-1 min-w-0">
-          {/* Metadata Byline */}
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[11px] text-[#666] dark:text-[#999] mb-1.5 font-sans">
-            <span className="font-semibold text-[#111] dark:text-[#EEE] uppercase tracking-wider text-[10px] sm:text-[11px]">
+          {/* 1. Kicker & Byline */}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1.5 font-sans">
+            <span className="kicker-tag text-[10px]">
+              {article.category || "Dispatch"}
+            </span>
+            <span className="text-[#CCC] dark:text-[#555]">|</span>
+            <span className="byline-text uppercase font-semibold text-[#111] dark:text-[#DDD] text-[10px]">
               {article.source_name}
             </span>
-            <span className="text-[#AAA] dark:text-[#555]">·</span>
-            <span className="font-mono text-[10px]">{timeAgo}</span>
-            {article.category && (
-              <>
-                <span className="text-[#AAA] dark:text-[#555]">·</span>
-                <span className="text-[#555] dark:text-[#AAA] italic hidden sm:inline">{article.category}</span>
-              </>
-            )}
+            <span className="text-[#CCC] dark:text-[#555]">|</span>
+            <span className="byline-text font-mono text-[10px]">{timeAgo}</span>
             {article.scope === "local" && (
-              <span className="text-[10px] bg-[#EAE8E3] dark:bg-[#25252D] text-[#444] dark:text-[#DDD] px-1.5 py-0.2 rounded font-mono font-medium">
+              <span className="text-[9px] bg-[#EAE8E3] dark:bg-[#25252D] text-[#444] dark:text-[#DDD] px-1.5 py-0.2 rounded font-mono font-medium">
                 🇪🇹 Local
               </span>
             )}
-            <span className="text-[10px] bg-[#EAF5EC] dark:bg-[#064E3B]/40 text-[#1E5631] dark:text-[#34D399] px-1.5 py-0.2 rounded font-semibold border border-[#D0EADB] dark:border-[#065F46]">
+            <span className="text-[9px] bg-[#EAF5EC] dark:bg-[#064E3B]/30 text-[#1E5631] dark:text-[#34D399] px-1.5 py-0.2 rounded font-semibold border border-[#D0EADB] dark:border-[#065F46]">
               🛡️ PesaCheck
             </span>
-            {(article.video_url || article.title?.toLowerCase().includes("video") || article.title?.toLowerCase().includes("briefing")) && (
-              <span className="text-[10px] bg-[#FFF0F0] dark:bg-[#3D1418] text-red-700 dark:text-red-400 px-1.5 py-0.2 rounded font-mono font-semibold border border-red-200 dark:border-red-900">
-                ▶ Video
-              </span>
-            )}
           </div>
 
-          {/* Headline */}
+          {/* 2. Headline in Broadsheet Serif */}
           <h3
             onClick={() => onOpenReader(article)}
-            className="font-editorial-headline text-base sm:text-lg md:text-xl font-bold text-[#111] dark:text-[#F2EFEB] group-hover:text-[#444] dark:group-hover:text-[#DDD] cursor-pointer transition-colors leading-snug mb-1.5"
+            className="font-headline text-base sm:text-xl text-[#121212] dark:text-[#F2EFEB] group-hover:text-[#A81B1B] dark:group-hover:text-[#E50914] cursor-pointer transition-colors leading-snug mb-2"
           >
             {article.title}
           </h3>
 
-          {/* Snippet */}
-          {article.content && (
-            <p className="font-editorial-body text-xs sm:text-sm text-[#555] dark:text-[#AAA] line-clamp-2 mb-2 leading-relaxed hidden sm:block">
-              {article.content}
-            </p>
-          )}
+          {/* 3. Summarized News in Clean Sans-Serif (The Japan Times style) */}
+          <p className="font-summary text-xs sm:text-[13px] line-clamp-2 mb-2 leading-relaxed">
+            {summaryTeaser}
+          </p>
 
-          {/* Warning Flag if Disputed */}
+          {/* Disputed Notice if flagged */}
           {hasHighMisleading && (
-            <div className="mb-2 text-xs text-[#990000] dark:text-[#F87171] bg-[#FFF0F0] dark:bg-[#3B1115] px-2 py-1 rounded border border-[#FFD0D0] dark:border-[#5C1D24] inline-block font-sans">
-              ⚠️ Readers flagged this story as requiring independent corroboration.
+            <div className="mb-2 text-[11px] text-[#A81B1B] dark:text-[#F87171] bg-[#FFF0F0] dark:bg-[#3B1115] px-2 py-0.5 rounded border border-[#FFD0D0] dark:border-[#5C1D24] inline-block font-sans">
+              ⚠️ Readers flagged this story for corroboration.
             </div>
           )}
 
-          {/* Micro Reaction & Action Bar */}
-          <div className="flex items-center space-x-2 text-[11px] text-[#666] dark:text-[#888] pt-0.5">
+          {/* 4. "Read More" Link + Actions */}
+          <div className="flex items-center space-x-2.5 text-[11px] font-sans pt-0.5">
             <button
               onClick={() => onOpenReader(article)}
-              className="text-[#111] dark:text-[#EEE] font-semibold hover:underline"
+              className="text-[#111] dark:text-white font-bold hover:underline flex items-center space-x-1"
             >
-              Read
+              <span>Read More</span>
+              <span>→</span>
             </button>
-            <span className="text-[#AAA] dark:text-[#555]">·</span>
+            <span className="text-[#CCC] dark:text-[#555]">·</span>
+            {article.original_url && (
+              <>
+                <a
+                  href={article.original_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#666] dark:text-[#AAA] hover:underline"
+                >
+                  Source ↗
+                </a>
+                <span className="text-[#CCC] dark:text-[#555]">·</span>
+              </>
+            )}
             <button
               onClick={() => onReact(article.id, "breaking")}
-              className="hover:text-black dark:hover:text-white transition-colors"
+              className="text-[#666] dark:text-[#AAA] hover:text-black dark:hover:text-white transition-colors"
             >
               🔥 {article.count_breaking || 0}
             </button>
             <button
               onClick={() => onReact(article.id, "helpful")}
-              className="hover:text-black dark:hover:text-white transition-colors"
+              className="text-[#666] dark:text-[#AAA] hover:text-black dark:hover:text-white transition-colors"
             >
               👍 {article.count_helpful || 0}
             </button>
             <button
-              onClick={() => onReact(article.id, "insightful")}
-              className="hover:text-black dark:hover:text-white transition-colors"
-            >
-              💡 {article.count_insightful || 0}
-            </button>
-            <button
-              onClick={() => onReact(article.id, "misleading")}
-              className="hover:text-[#990000] dark:hover:text-red-400 transition-colors"
-              title="Disputed by readers"
-            >
-              ⚠️ {article.count_misleading || 0}
-            </button>
-            <span className="text-[#AAA] dark:text-[#555]">·</span>
-            <button
               onClick={handleShare}
-              className="hover:text-black dark:hover:text-white transition-colors font-medium"
+              className="text-[#666] dark:text-[#AAA] hover:text-black dark:hover:text-white transition-colors ml-auto font-medium"
             >
               {copied ? "Copied" : "📤 Share"}
             </button>
           </div>
         </div>
 
-        {/* Right: Square Editorial Thumbnail */}
+        {/* Right: Square Editorial Thumbnail (80px desktop, 64px mobile) */}
         {article.image_url ? (
           <div
             onClick={() => onOpenReader(article)}
-            className="w-18 h-18 sm:w-24 sm:h-24 flex-shrink-0 rounded overflow-hidden bg-[#ECEAE4] dark:bg-[#202028] border border-[#E0DED7] dark:border-[#333] cursor-pointer"
+            className="w-18 h-18 sm:w-22 sm:h-22 flex-shrink-0 rounded-xs overflow-hidden bg-[#F2F0EB] dark:bg-[#1E1E24] border border-[#E5E5E5] dark:border-[#333] cursor-pointer"
           >
             <img
               src={article.image_url}

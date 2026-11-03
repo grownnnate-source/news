@@ -48,13 +48,13 @@ router.get("/telegram/:channel", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const {
-      scope = "local",
-      city = "Addis Ababa",
+      scope,
+      city,
       category,
       sort = "latest",
       search,
       page = 1,
-      limit = 20
+      limit = 25
     } = req.query;
 
     const pageNum = Math.max(1, parseInt(page, 10));
@@ -66,13 +66,13 @@ router.get("/", async (req, res) => {
       .from("articles_with_stats")
       .select("*", { count: "exact" });
 
-    // Scope filter (local vs global)
-    if (scope) {
+    // Scope filter: 'local' | 'global'. If 'all' or omitted, include all articles.
+    if (scope && scope !== "all") {
       query = query.eq("scope", scope);
     }
 
-    // City filter (only applies to local scope)
-    if (scope === "local" && city) {
+    // City filter (only applies if explicitly provided and not 'all')
+    if (city && city.toLowerCase() !== "all") {
       query = query.eq("city", city);
     }
 

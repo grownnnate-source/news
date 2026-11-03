@@ -1,11 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #FAF9F6;
-  --foreground: #111111;
+  --background: #FFFFFF;
+  --foreground: #121212;
   --paper-card: #FFFFFF;
-  --ink-rule: #E5E2DA;
-  --ink-rule-subtle: #EFECE6;
+  --paper-muted: #F8F7F4;
+  --ink-rule: #E5E5E5;
+  --ink-rule-strong: #111111;
+  --ink-kicker: #A81B1B;
   --ink-muted: #666666;
   --font-serif: var(--font-newsreader), Georgia, 'Times New Roman', serif;
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -15,8 +17,10 @@
   --background: #111113;
   --foreground: #F2EFEB;
   --paper-card: #18181C;
-  --ink-rule: #29292F;
-  --ink-rule-subtle: #212126;
+  --paper-muted: #1A1A22;
+  --ink-rule: #28282E;
+  --ink-rule-strong: #E5E5E5;
+  --ink-kicker: #E50914;
   --ink-muted: #9E9E9E;
 }
 
@@ -33,52 +37,75 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-/* Authentic Japanese & British broadsheet typography (The Japan Times / Financial Times / NYT style) */
+/* Distinct Typography Hierarchy (The Japan Times & The New York Times benchmark) */
 .font-masthead {
   font-family: var(--font-serif);
   letter-spacing: -0.04em;
   font-feature-settings: "kern" 1, "liga" 1;
 }
 
-.font-editorial-headline {
+/* 1. HEADLINES: Classic authoritative Broadsheet Serif */
+.font-headline {
   font-family: var(--font-serif);
-  line-height: 1.22;
+  line-height: 1.2;
   letter-spacing: -0.025em;
   text-wrap: balance;
+  font-weight: 700;
 }
 
-.font-editorial-body {
-  font-family: var(--font-serif);
-  line-height: 1.75;
-  font-feature-settings: "kern" 1, "onum" 1;
+/* 2. MAIN NEWS & SUMMARIES: Distinct, clean, high-legibility Sans-Serif */
+.font-summary {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem; /* 15px */
+  line-height: 1.6;
+  color: #4A4A4A;
+}
+.dark .font-summary {
+  color: #B5B5BA;
 }
 
-/* Broadsheet hairline rules */
-.ink-border-b {
+/* 3. SECTION KICKER TAGS: Small, bold, uppercase tracking */
+.kicker-tag {
+  font-family: var(--font-sans);
+  font-size: 0.6875rem; /* 11px */
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-kicker);
+}
+
+/* 4. BYLINES & DATELINES: Understated, clean sans */
+.byline-text {
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+/* Broadsheet hairline divider borders (1px) */
+.hairline-b {
+  border-bottom: 1px solid var(--ink-rule);
+}
+.hairline-t {
+  border-top: 1px solid var(--ink-rule);
+}
+.hairline-r {
+  border-right: 1px solid var(--ink-rule);
+}
+.hairline-l {
+  border-left: 1px solid var(--ink-rule);
+}
+
+/* The Japan Times / NYT Navigation Bar: Thick top rule, thin bottom rule */
+.broadsheet-nav-bar {
+  border-top: 2px solid var(--ink-rule-strong);
   border-bottom: 1px solid var(--ink-rule);
 }
 
-.ink-border-t {
-  border-top: 1px solid var(--ink-rule);
-}
-
-.ink-border {
-  border: 1px solid var(--ink-rule);
-}
-
-/* Classic double rules */
-.double-ink-border-b {
-  border-bottom: 3px double var(--ink-rule);
-}
-
-.double-ink-border-t {
-  border-top: 3px double var(--ink-rule);
-}
-
-/* Hide horizontal scrollbar while preserving touch swipe */
+/* Hide horizontal scrollbar while preserving smooth touch swipe */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -87,12 +114,12 @@ body {
   scrollbar-width: none;
 }
 
-/* Fluid responsive container */
+/* Standard Editorial Container */
 .editorial-container {
   width: 100%;
-  max-width: 1140px;
+  max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
-  padding-left: clamp(12px, 3vw, 24px);
-  padding-right: clamp(12px, 3vw, 24px);
+  padding-left: clamp(14px, 3vw, 24px);
+  padding-right: clamp(14px, 3vw, 24px);
 }

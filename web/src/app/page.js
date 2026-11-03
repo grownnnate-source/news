@@ -17,7 +17,8 @@ export default function HomePage() {
   const [error, setError] = useState(null);
   const [activeScope, setActiveScope] = useState("all");
   const [activeCategory, setActiveCategory] = useState("");
-  const [activeLanguage, setActiveLanguage] = useState("all"); // 'all' | 'am' | 'en'
+  // Default language is strictly English as requested
+  const [activeLanguage, setActiveLanguage] = useState("en"); // 'en' | 'am' | 'all'
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStory, setActiveStory] = useState(null);
   const [activeVideo, setActiveVideo] = useState(null);
@@ -34,7 +35,7 @@ export default function HomePage() {
 
         const params = new URLSearchParams({
           page: targetPage.toString(),
-          limit: "25",
+          limit: "35",
           scope: activeScope,
         });
 
@@ -60,7 +61,7 @@ export default function HomePage() {
           setArticles(incoming);
         }
 
-        setHasMore(incoming.length === 25);
+        setHasMore(incoming.length === 35);
         setPage(targetPage);
       } catch (err) {
         console.error("[Wire Error] Failed fetching articles:", err);
@@ -79,7 +80,6 @@ export default function HomePage() {
 
   // Handle 1-Tap Sentiment Reactions with optimistic local state update
   const handleReaction = async (articleId, reactionType) => {
-    // 1. Optimistic update
     setArticles((prev) =>
       prev.map((art) => {
         if (art.id !== articleId) return art;
@@ -99,7 +99,6 @@ export default function HomePage() {
       }));
     }
 
-    // 2. Transmit to backend
     try {
       await fetch(`${API_BASE}/api/reactions`, {
         method: "POST",
@@ -114,24 +113,24 @@ export default function HomePage() {
     }
   };
 
-  // Filter articles by language and search query
+  // Filter articles by language (Default: English) and search query
   const filteredArticles = useMemo(() => {
     let result = articles;
 
-    // 1. Language Filter
-    if (activeLanguage === "am") {
+    // 1. Language Filter (Strict English Default)
+    if (activeLanguage === "en") {
+      result = result.filter(
+        (a) =>
+          !/[\u1200-\u137F]/.test(a.title) &&
+          !a.source_name?.toLowerCase().includes("amharic")
+      );
+    } else if (activeLanguage === "am") {
       result = result.filter(
         (a) =>
           /[\u1200-\u137F]/.test(a.title) ||
           /[\u1200-\u137F]/.test(a.content || "") ||
           a.source_name?.toLowerCase().includes("amharic") ||
           a.source_name?.toLowerCase().includes("tikvah")
-      );
-    } else if (activeLanguage === "en") {
-      result = result.filter(
-        (a) =>
-          !/[\u1200-\u137F]/.test(a.title) &&
-          !a.source_name?.toLowerCase().includes("amharic")
       );
     }
 
@@ -149,18 +148,19 @@ export default function HomePage() {
     return result;
   }, [articles, activeLanguage, searchQuery]);
 
+  // Lead article is the first article with an image or highest velocity
   const leadArticle = filteredArticles[0] || null;
   const subsequentArticles = filteredArticles.slice(1);
 
-  // Local wire highlights (e.g. Tikvah, ENA, BBC Amharic)
-  const localPulseStories = useMemo(() => {
-    return articles
-      .filter((a) => a.scope === "local" || a.source_type === "telegram")
+  // Trending / Velocity top ranked list (The Japan Times / NYT style numbered sidebar)
+  const trendingArticles = useMemo(() => {
+    return [...filteredArticles]
+      .sort((a, b) => (b.velocity_score || 0) - (a.velocity_score || 0))
       .slice(0, 5);
-  }, [articles]);
+  }, [filteredArticles]);
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] dark:bg-[#111113] text-[#111111] dark:text-[#F2EFEB] font-sans antialiased selection:bg-[#E2DFC9] dark:selection:bg-[#33333C] transition-colors">
+    <div className="min-h-screen bg-white dark:bg-[#111113] text-[#121212] dark:text-[#F2EFEB] font-sans antialiased selection:bg-[#EAEAEA] dark:selection:bg-[#33333C]">
       {/* Broadsheet Masthead Header */}
       <Header
         activeScope={activeScope}
@@ -172,18 +172,18 @@ export default function HomePage() {
         categories={CATEGORIES}
       />
 
-      {/* Main Container */}
+      {/* Main Broadsheet Container */}
       <main className="w-full editorial-container py-3 sm:py-5">
-        {/* Search & Wire Status Strip */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pb-3 mb-4 ink-border-b text-xs">
-          <div className="flex items-center space-x-2.5 w-full sm:w-auto">
+        {/* Search & Wire Feed Status Strip */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pb-2.5 mb-4 hairline-b text-xs font-sans">
+          <div className="flex items-center space-x-2 w-full sm:w-auto">
             <div className="relative flex-1 sm:w-80">
               <input
                 type="text"
                 placeholder="Search headlines, desks, or topics..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 bg-[#F2F0EB] dark:bg-[#1C1C22] border border-[#DDD9CE] dark:border-[#2E2E36] rounded text-xs text-[#111] dark:text-[#EEE] placeholder-[#888] dark:placeholder-[#666] focus:outline-none focus:border-[#111] dark:focus:border-[#DDD]"
+                className="w-full pl-8 pr-3 py-1.5 bg-[#F9F8F6] dark:bg-[#1C1C22] border border-[#E5E5E5] dark:border-[#2E2E36] rounded-xs text-xs text-[#111] dark:text-[#EEE] placeholder-[#888] focus:outline-none focus:border-[#111] dark:focus:border-[#DDD]"
               />
               <span className="absolute left-2.5 top-1.5 text-[#888]">🔍</span>
             </div>
@@ -197,19 +197,19 @@ export default function HomePage() {
             )}
           </div>
 
-          <div className="flex items-center space-x-3 text-[#666] dark:text-[#888] text-xs font-mono">
+          <div className="flex items-center space-x-3 text-[#666] dark:text-[#888] text-xs font-sans">
             <span className="flex items-center space-x-1.5">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse"></span>
-              <span><strong>{filteredArticles.length}</strong> Dispatches</span>
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-400"></span>
+              <span>Showing <strong>{filteredArticles.length}</strong> {activeLanguage === "en" ? "English" : activeLanguage === "am" ? "Amharic" : "Total"} Dispatches</span>
             </span>
-            <span>·</span>
+            <span className="text-[#CCC]">|</span>
             <button
               onClick={() => {
                 setIsRefreshing(true);
                 fetchArticles(1, false);
               }}
               disabled={isRefreshing}
-              className="text-[#111] dark:text-[#EEE] hover:underline font-medium font-sans flex items-center space-x-1"
+              className="text-[#111] dark:text-[#EEE] hover:underline font-bold flex items-center space-x-1"
             >
               <span>{isRefreshing ? "Syncing..." : "Sync Latest ↻"}</span>
             </button>
@@ -219,23 +219,23 @@ export default function HomePage() {
         {/* Loading Spinner */}
         {loading && (
           <div className="py-24 text-center">
-            <div className="inline-block w-8 h-8 border-2 border-[#111] dark:border-white border-t-transparent rounded-full animate-spin mb-3"></div>
+            <div className="inline-block w-7 h-7 border-2 border-[#111] dark:border-white border-t-transparent rounded-full animate-spin mb-3"></div>
             <p className="font-serif italic text-[#666] dark:text-[#888] text-sm">
-              Retrieving verified broadsheet dispatches from regional & global news desks...
+              Retrieving verified broadsheet wire dispatches...
             </p>
           </div>
         )}
 
         {/* Error Notice */}
         {error && !loading && (
-          <div className="p-6 bg-[#FFF2F2] dark:bg-[#2D1214] border border-[#FFD2D2] dark:border-[#4D1E22] rounded text-center my-6">
-            <p className="font-serif font-bold text-[#990000] dark:text-[#F87171] mb-1">Wire Connection Notice</p>
+          <div className="p-6 bg-[#FFF5F5] dark:bg-[#2D1214] border border-[#FFD2D2] dark:border-[#4D1E22] rounded-xs text-center my-6">
+            <p className="font-serif font-bold text-[#A81B1B] dark:text-[#F87171] mb-1">Wire Notice</p>
             <p className="text-sm text-[#666] dark:text-[#AAA] mb-4">{error}</p>
             <button
               onClick={() => fetchArticles(1, false)}
-              className="px-4 py-1.5 bg-[#111] dark:bg-[#F2EFEB] text-[#FAF9F6] dark:text-[#111] text-xs font-semibold rounded hover:bg-[#333] transition-colors"
+              className="px-4 py-1.5 bg-[#111] dark:bg-[#F2EFEB] text-white dark:text-[#111] text-xs font-bold rounded-xs hover:bg-[#333]"
             >
-              Reconnect to Wire
+              Reconnect
             </button>
           </div>
         )}
@@ -243,32 +243,34 @@ export default function HomePage() {
         {/* Editorial Feed Content */}
         {!loading && !error && (
           <>
-            {/* Lead Story Feature */}
-            {leadArticle && (
-              <LeadStory
-                article={leadArticle}
-                onOpenReader={setActiveStory}
-                onReact={handleReaction}
-                onWatchVideo={setActiveVideo}
-              />
-            )}
+            {/* The Japan Times / NYT Multi-Column Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-2">
+              {/* Left Column: Lead Story + Continuous Wire (8 Cols) */}
+              <div className="lg:col-span-8 space-y-2">
+                {/* 1. Lead Story */}
+                {leadArticle && (
+                  <LeadStory
+                    article={leadArticle}
+                    onOpenReader={setActiveStory}
+                    onReact={handleReaction}
+                    onWatchVideo={setActiveVideo}
+                  />
+                )}
 
-            {/* Broadsheet Columns Layout (8 cols feed + 4 cols sidebar) */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-6 sm:pt-8">
-              {/* Primary Story Feed (Left 8 Cols) */}
-              <div className="lg:col-span-8 space-y-1">
-                <div className="flex items-center justify-between pb-2 mb-2 ink-border-b">
-                  <h3 className="font-editorial-headline text-xl sm:text-2xl font-bold tracking-tight text-[#111] dark:text-[#F2EFEB]">
-                    The Continuous Wire
+                {/* 2. The Continuous Wire Header */}
+                <div className="pt-4 pb-2 mb-2 hairline-b flex items-center justify-between">
+                  <h3 className="font-headline text-xl sm:text-2xl text-[#121212] dark:text-[#F2EFEB]">
+                    The Wire Dispatch Stream
                   </h3>
-                  <span className="text-[11px] text-[#777] dark:text-[#888] uppercase tracking-wider font-mono">
-                    Ranked by Velocity & PesaCheck Verification
+                  <span className="byline-text uppercase font-semibold">
+                    Ranked by Velocity & Verification
                   </span>
                 </div>
 
+                {/* 3. Wire Story Rows */}
                 {subsequentArticles.length === 0 ? (
-                  <p className="py-12 text-center text-sm text-[#777] dark:text-[#888] font-serif italic">
-                    No dispatches found matching the current desk filter.
+                  <p className="py-12 text-center text-sm text-[#777] font-serif italic">
+                    No dispatches found matching the current filter.
                   </p>
                 ) : (
                   subsequentArticles.map((article) => (
@@ -281,12 +283,12 @@ export default function HomePage() {
                   ))
                 )}
 
-                {/* Load More Pagination */}
+                {/* 4. Load More Pagination */}
                 {hasMore && (
                   <div className="text-center pt-8 pb-4">
                     <button
                       onClick={() => fetchArticles(page + 1, true)}
-                      className="px-6 py-2.5 bg-white dark:bg-[#1A1A22] border border-[#111] dark:border-[#444] text-[#111] dark:text-[#EEE] text-xs font-semibold uppercase tracking-wider hover:bg-[#111] hover:text-[#FAF9F6] dark:hover:bg-white dark:hover:text-black transition-all rounded"
+                      className="px-6 py-2.5 bg-white dark:bg-[#1A1A22] border border-[#111] dark:border-[#444] text-[#111] dark:text-[#EEE] text-xs font-bold uppercase tracking-wider hover:bg-[#111] hover:text-white dark:hover:bg-white dark:hover:text-black transition-all rounded-xs"
                     >
                       Load More Dispatches ↓
                     </button>
@@ -294,99 +296,103 @@ export default function HomePage() {
                 )}
               </div>
 
-              {/* Sidebar Column (Right 4 Cols) */}
-              <aside className="lg:col-span-4 space-y-6 lg:pl-6 lg:border-l lg:border-[#E0DED7] dark:lg:border-[#2A2A32]">
-                {/* Ethiopia & Horn Regional Pulse */}
-                <div className="bg-[#F6F4EE] dark:bg-[#181820] p-4 rounded border border-[#E4E1D8] dark:border-[#2A2A34]">
-                  <div className="flex items-center justify-between pb-2 mb-3 ink-border-b">
-                    <h4 className="font-serif font-bold text-sm uppercase tracking-wider text-[#111] dark:text-[#EEE]">
-                      🇪🇹 Horn Pulse
+              {/* Right Column: Sidebar (4 Cols) — The Japan Times / NYT style */}
+              <aside className="lg:col-span-4 space-y-6 lg:pl-6 lg:hairline-l">
+                {/* Section A: Numbered Velocity Ranking (01, 02, 03, 04, 05) */}
+                <div className="bg-[#FAF9F6] dark:bg-[#16161C] p-4.5 rounded-xs border border-[#E5E5E5] dark:border-[#282830]">
+                  <div className="flex items-center justify-between pb-2 mb-3 hairline-b">
+                    <h4 className="font-headline text-sm uppercase tracking-wider text-[#111] dark:text-[#EEE]">
+                      Trending Dispatches
                     </h4>
-                    <span className="text-[10px] bg-[#111] dark:bg-[#EEE] text-white dark:text-[#111] px-1.5 py-0.5 rounded font-mono font-bold">
-                      LIVE
+                    <span className="text-[10px] text-[#A81B1B] dark:text-[#E50914] font-mono font-bold">
+                      TOP 5
                     </span>
                   </div>
 
-                  <p className="text-xs text-[#666] dark:text-[#999] mb-3 leading-relaxed">
-                    Fast-breaking bulletins direct from Addis Ababa wires and Telegram channels.
-                  </p>
-
-                  <div className="space-y-3">
-                    {localPulseStories.map((story) => (
+                  <div className="space-y-3.5">
+                    {trendingArticles.map((story, idx) => (
                       <div
                         key={story.id}
                         onClick={() => setActiveStory(story)}
-                        className="cursor-pointer group pb-2 ink-border-b last:border-b-0"
+                        className="cursor-pointer group flex items-start space-x-3 pb-3 hairline-b last:border-b-0"
                       >
-                        <span className="text-[10px] uppercase font-bold text-[#990000] dark:text-[#E50914] tracking-wider">
-                          {story.source_name}
+                        <span className="font-serif text-2xl font-bold text-[#CCC] dark:text-[#444] leading-none w-6">
+                          0{idx + 1}
                         </span>
-                        <h5 className="font-editorial-headline text-xs font-semibold text-[#111] dark:text-[#DDD] group-hover:text-[#555] dark:group-hover:text-white line-clamp-2 leading-snug mt-0.5">
-                          {story.title}
-                        </h5>
+                        <div className="flex-1">
+                          <span className="kicker-tag text-[9px]">
+                            {story.source_name}
+                          </span>
+                          <h5 className="font-headline text-xs font-bold text-[#111] dark:text-[#DDD] group-hover:text-[#A81B1B] dark:group-hover:text-[#E50914] line-clamp-2 leading-snug mt-0.5">
+                            {story.title}
+                          </h5>
+                          <span className="byline-text text-[10px] mt-1 inline-block">
+                            Read Dispatch →
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* Video Journalism Spotlight Card */}
-                <div className="bg-[#141416] text-white p-4 rounded border border-[#2D2D34] text-xs space-y-2.5">
-                  <div className="flex items-center justify-between font-serif">
+                {/* Section B: Video Report Spotlight */}
+                <div className="bg-[#121212] text-white p-4.5 rounded-xs border border-[#2A2A2A] text-xs space-y-2.5">
+                  <div className="flex items-center justify-between font-sans">
                     <div className="flex items-center space-x-1.5 font-bold text-red-500">
                       <span>▶</span>
-                      <span className="uppercase tracking-wider font-mono text-[11px]">Video Dispatch</span>
+                      <span className="uppercase tracking-wider font-mono text-[10px]">Broadcast Dispatch</span>
                     </div>
                     <span className="text-[9px] bg-red-600 text-white px-1.5 py-0.2 rounded font-mono font-bold">
-                      BROADCAST
+                      VIDEO
                     </span>
                   </div>
-                  <p className="text-[#AAA] leading-relaxed">
-                    Watch televised press briefings, international summits, and on-the-ground regional video reports directly in ThreadNews.
+                  <p className="text-[#AAA] leading-relaxed font-sans text-xs">
+                    Watch televised press conferences, international summits, and regional video reports directly in ThreadNews.
                   </p>
                   {leadArticle && (
                     <button
                       onClick={() => setActiveVideo(leadArticle)}
-                      className="w-full mt-1 py-1.5 bg-white text-[#111] rounded text-[11px] font-semibold hover:bg-[#ECEAE4] transition-colors flex items-center justify-center space-x-1"
+                      className="w-full mt-1 py-2 bg-white text-[#111] rounded-xs text-xs font-bold hover:bg-[#EEE] transition-colors flex items-center justify-center space-x-1"
                     >
                       <span>▶ Open Video Theater</span>
                     </button>
                   )}
                 </div>
 
-                {/* Boring Report De-Sensationalization Card */}
-                <div className="bg-white dark:bg-[#1A1A22] p-4 rounded border border-[#DDD] dark:border-[#2C2C34] text-xs space-y-2">
+                {/* Section C: PesaCheck Standards & Editorial Integrity Card */}
+                <div className="bg-white dark:bg-[#1A1A22] p-4.5 rounded-xs border border-[#E5E5E5] dark:border-[#2C2C34] text-xs space-y-2">
                   <div className="flex items-center space-x-1.5 font-bold text-[#111] dark:text-[#EEE] font-serif">
-                    <span>📰</span>
-                    <span>De-Sensationalized Fact Summaries</span>
+                    <span>🛡️</span>
+                    <span className="font-sans text-xs uppercase tracking-wider font-bold">Editorial Integrity</span>
                   </div>
-                  <p className="text-[#666] dark:text-[#999] leading-relaxed">
-                    Inspired by <em>Boring Report</em>: sensationalist adjectives and emotional clickbait hooks are automatically stripped down to 3 objective, verifiable key facts.
+                  <p className="text-[#555] dark:text-[#AAA] leading-relaxed font-sans text-xs">
+                    All dispatches are monitored against <strong>PesaCheck</strong> verification standards and de-sensationalized into 3 objective factual takeaways.
                   </p>
-                  <div className="pt-2 text-[11px] text-[#444] dark:text-[#AAA] flex items-center space-x-2">
+                  <div className="pt-2 text-[10px] text-[#666] dark:text-[#AAA] flex items-center space-x-2 font-mono">
                     <span className="text-emerald-700 dark:text-emerald-400 font-bold">✓ Ad-Free</span>
                     <span>·</span>
-                    <span className="text-emerald-700 dark:text-emerald-400 font-bold">✓ 50ms Reader</span>
-                    <span>·</span>
                     <span className="text-emerald-700 dark:text-emerald-400 font-bold">✓ Factual</span>
+                    <span>·</span>
+                    <span className="text-emerald-700 dark:text-emerald-400 font-bold">✓ Multi-Source</span>
                   </div>
                 </div>
 
-                {/* Verified News Desks List */}
-                <div className="p-4 bg-[#F9F8F5] dark:bg-[#16161C] rounded border border-[#E5E3DC] dark:border-[#26262E]">
-                  <h4 className="font-serif font-bold text-xs uppercase tracking-wider text-[#333] dark:text-[#DDD] mb-3 font-mono">
-                    Connected Desks (16)
+                {/* Section D: Connected Wire Desks */}
+                <div className="p-4 bg-[#FAF9F6] dark:bg-[#151518] rounded-xs border border-[#E5E5E5] dark:border-[#26262E] font-sans">
+                  <h4 className="font-bold text-[11px] uppercase tracking-wider text-[#333] dark:text-[#DDD] mb-2.5 font-mono">
+                    Accredited Wire Desks (16)
                   </h4>
                   <div className="space-y-1.5 text-xs text-[#555] dark:text-[#AAA]">
                     <div className="flex items-center justify-between">
-                      <span>Tikvah Ethiopia (@tikvahethiopia)</span>
+                      <span>The Japan Times</span>
+                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-semibold">Active</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>BBC World News & Africa</span>
                       <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-semibold">Active</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Ethiopian News Agency (ENA)</span>
-                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-semibold">Active</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>BBC News Amharic</span>
                       <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-semibold">Active</span>
                     </div>
                     <div className="flex items-center justify-between">
@@ -398,11 +404,7 @@ export default function HomePage() {
                       <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-semibold">Active</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>The Japan Times</span>
-                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-semibold">Active</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>BBC World News & Africa</span>
+                      <span>Tikvah Ethiopia (@tikvahethiopia)</span>
                       <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-semibold">Active</span>
                     </div>
                     <div className="flex items-center justify-between">
@@ -434,28 +436,32 @@ export default function HomePage() {
         />
       )}
 
-      {/* Broadsheet Editorial Footer */}
-      <footer className="w-full editorial-container mt-16 pt-8 pb-12 double-ink-border-t text-xs text-[#666] dark:text-[#888]">
+      {/* The Japan Times / NYT Broadsheet Footer */}
+      <footer className="w-full editorial-container mt-16 pt-8 pb-12 hairline-t text-xs text-[#666] dark:text-[#888] font-sans">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
           <div>
-            <h5 className="font-serif font-bold text-sm text-[#111] dark:text-[#EEE] mb-2">THREADNEWS</h5>
-            <p className="leading-relaxed">
+            <h5 className="font-masthead font-bold text-base text-[#111] dark:text-[#EEE] mb-2">THREADNEWS</h5>
+            <p className="leading-relaxed text-[#555] dark:text-[#999]">
               An independent, multi-source regional and international wire service delivering unhyped, fast, corroborative journalism.
             </p>
           </div>
           <div>
-            <h5 className="font-serif font-bold text-sm text-[#111] dark:text-[#EEE] mb-2">Editorial Principles</h5>
-            <ul className="space-y-1">
-              <li>• Multi-Source Cross-Checking</li>
-              <li>• Minimalist Broadsheet Layout</li>
-              <li>• Zero Clickbait & Zero Third-Party Ad Trackers</li>
+            <h5 className="font-bold text-xs uppercase tracking-wider text-[#111] dark:text-[#EEE] mb-2 font-mono">
+              Editorial Standards
+            </h5>
+            <ul className="space-y-1 text-[#555] dark:text-[#999]">
+              <li>• Multi-Source Corroboration & Cross-Checking</li>
+              <li>• Minimalist Broadsheet Layout (Japan Times / NYT)</li>
+              <li>• Zero Third-Party Advertising Trackers</li>
               <li>• 1-Tap Reader Consensus Voting</li>
             </ul>
           </div>
           <div>
-            <h5 className="font-serif font-bold text-sm text-[#111] dark:text-[#EEE] mb-2">Editions</h5>
-            <p className="leading-relaxed mb-2">
-              Serving Addis Ababa, the Horn of Africa, Tokyo, London, and Global technology hubs.
+            <h5 className="font-bold text-xs uppercase tracking-wider text-[#111] dark:text-[#EEE] mb-2 font-mono">
+              Syndication Desks
+            </h5>
+            <p className="leading-relaxed mb-2 text-[#555] dark:text-[#999]">
+              Tokyo · Addis Ababa · London · New York · Nairobi
             </p>
             <p className="font-mono text-[11px] text-[#888] dark:text-[#666]">
               © 2026 ThreadNews Wire Syndicate. All Rights Reserved.

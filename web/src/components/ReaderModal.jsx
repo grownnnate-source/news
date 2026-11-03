@@ -27,7 +27,7 @@ export default function ReaderModal({ article, onClose, onReact }) {
   const bullets = Array.isArray(article.summary) && article.summary.length > 0
     ? article.summary
     : [
-        "Primary dispatch reported by " + (article.source_name || "original desk") + ".",
+        `Primary dispatch reported by ${article.source_name || "original desk"}.`,
         "Cross-referenced against registered regional sources for corroboration.",
         "Full original dispatch accessible via direct publisher link below."
       ];
@@ -82,30 +82,30 @@ export default function ReaderModal({ article, onClose, onReact }) {
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 dark:bg-black/90 backdrop-blur-sm flex justify-center p-0 sm:p-4 md:p-6 animate-in fade-in duration-200">
-      <div className="relative w-full sm:max-w-3xl min-h-screen sm:min-h-0 bg-[#FAF9F6] dark:bg-[#151518] text-[#111111] dark:text-[#F2EFEB] sm:rounded-lg shadow-2xl overflow-hidden my-auto border-0 sm:border border-[#D5D3CC] dark:border-[#2C2C32] flex flex-col max-h-screen">
+      <div className="relative w-full sm:max-w-3xl min-h-screen sm:min-h-0 bg-white dark:bg-[#151518] text-[#121212] dark:text-[#F2EFEB] sm:rounded-sm shadow-2xl overflow-hidden my-auto border-0 sm:border border-[#E0E0E0] dark:border-[#2C2C32] flex flex-col max-h-screen">
         {/* Reading Progress Line */}
-        <div className="h-0.5 bg-[#DDD] dark:bg-[#2A2A30] w-full">
+        <div className="h-0.5 bg-[#EAEAEA] dark:bg-[#2A2A30] w-full">
           <div
-            className="h-full bg-[#111] dark:bg-[#34D399] transition-all duration-100"
+            className="h-full bg-[#A81B1B] dark:bg-[#E50914] transition-all duration-100"
             style={{ width: `${scrollProgress}%` }}
           />
         </div>
 
         {/* Modal Top Bar */}
-        <div className="sticky top-0 z-10 bg-[#FAF9F6]/95 dark:bg-[#151518]/95 backdrop-blur-md px-4 sm:px-6 py-3 ink-border-b flex items-center justify-between">
+        <div className="sticky top-0 z-10 bg-white/95 dark:bg-[#151518]/95 backdrop-blur-md px-4 sm:px-6 py-3 hairline-b flex items-center justify-between font-sans">
           <button
             onClick={onClose}
-            className="text-xs uppercase tracking-wider font-semibold text-[#555] dark:text-[#AAA] hover:text-[#111] dark:hover:text-white flex items-center space-x-1"
+            className="text-xs uppercase tracking-wider font-bold text-[#444] dark:text-[#AAA] hover:text-[#111] dark:hover:text-white flex items-center space-x-1"
           >
             <span>←</span>
-            <span>Back</span>
+            <span>Back to Wire</span>
           </button>
 
-          <div className="flex items-center space-x-2 sm:space-x-3 text-xs text-[#666] dark:text-[#AAA]">
+          <div className="flex items-center space-x-3 text-xs text-[#666] dark:text-[#AAA]">
             <span className="font-mono text-[11px]">⏱️ {readingTime}</span>
             <span>·</span>
             {/* Font Size Adjuster */}
-            <div className="flex items-center space-x-1 bg-[#ECEAE4] dark:bg-[#22222A] px-1.5 py-0.5 rounded text-[11px] font-sans">
+            <div className="flex items-center space-x-1 bg-[#F2F0EB] dark:bg-[#22222A] px-2 py-0.5 rounded text-[11px]">
               <button
                 onClick={() => setFontSize("small")}
                 className={`px-1.5 py-0.2 rounded ${fontSize === "small" ? "font-bold text-black dark:text-white" : "text-[#777]"}`}
@@ -131,7 +131,7 @@ export default function ReaderModal({ article, onClose, onReact }) {
             <span>·</span>
             <button
               onClick={handleShare}
-              className="px-2 py-0.5 rounded bg-[#ECEAE4] dark:bg-[#22222A] hover:bg-[#DDD] dark:hover:bg-[#333] text-[11px] font-medium"
+              className="px-2.5 py-1 rounded bg-[#F2F0EB] dark:bg-[#22222A] hover:bg-[#E0DED6] dark:hover:bg-[#333] text-[11px] font-medium"
             >
               {copiedLink ? "✓ Copied" : "📤 Share"}
             </button>
@@ -139,46 +139,41 @@ export default function ReaderModal({ article, onClose, onReact }) {
         </div>
 
         {/* Scrollable Reader Content */}
-        <div onScroll={handleScroll} className="px-4 sm:px-10 md:px-14 py-6 sm:py-8 overflow-y-auto flex-1">
-          {/* Metadata */}
-          <div className="flex flex-wrap items-center justify-between text-xs text-[#777] dark:text-[#888] mb-3 font-mono">
-            <span>
-              {article.source_name} · Published{" "}
-              {new Date(article.published_at).toLocaleString("en-US", {
-                month: "short",
+        <div onScroll={handleScroll} className="px-5 sm:px-12 md:px-16 py-6 sm:py-8 overflow-y-auto flex-1">
+          {/* Section Kicker & Publication Byline */}
+          <div className="flex flex-wrap items-center justify-between text-xs text-[#666] dark:text-[#888] mb-3 font-sans">
+            <span className="kicker-tag text-xs">
+              {article.category || "General Dispatch"} | {article.source_name}
+            </span>
+            <span className="font-mono text-[11px]">
+              Published {new Date(article.published_at).toLocaleDateString("en-US", {
+                month: "long",
                 day: "numeric",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
+                year: "numeric"
               })}
             </span>
-            {article.category && (
-              <span className="uppercase text-[#990000] dark:text-[#E50914] font-semibold">
-                {article.category}
-              </span>
-            )}
           </div>
 
-          {/* Headline */}
-          <h1 className="font-editorial-headline text-2xl sm:text-4xl md:text-5xl font-bold text-[#111111] dark:text-[#F2EFEB] leading-tight mb-5">
+          {/* Headline in Majestic Broadsheet Serif */}
+          <h1 className="font-headline text-2xl sm:text-4xl md:text-5xl text-[#121212] dark:text-[#F2EFEB] leading-tight mb-4">
             {article.title}
           </h1>
 
           {/* PesaCheck Standards Verification Badge */}
-          <div className="flex items-center justify-between bg-[#EAF5EC] dark:bg-[#064E3B]/40 border border-[#CDE5D6] dark:border-[#065F46] px-3.5 py-2 rounded text-xs text-[#1E5631] dark:text-[#34D399] mb-6">
+          <div className="flex items-center justify-between bg-[#EAF5EC] dark:bg-[#064E3B]/30 border border-[#D0EADB] dark:border-[#065F46] px-3.5 py-2 rounded text-xs text-[#1E5631] dark:text-[#34D399] mb-6 font-sans">
             <div className="flex items-center space-x-2">
-              <span className="text-sm">🛡️</span>
+              <span>🛡️</span>
               <span className="font-semibold">PesaCheck Standards Verified</span>
-              <span className="text-[#3F7550] dark:text-[#A7F3D0] hidden sm:inline">· Corroborated across accredited regional news desks</span>
+              <span className="text-[#3F7550] dark:text-[#A7F3D0] hidden sm:inline">· Corroborated across accredited news desks</span>
             </div>
             <span className="font-mono text-[10px] bg-white/80 dark:bg-black/40 px-2 py-0.5 rounded border border-[#BDDDC7] dark:border-[#065F46]">
               CROSS-VERIFIED
             </span>
           </div>
 
-          {/* Media Header */}
+          {/* Featured Image */}
           {article.image_url && (
-            <div className="mb-6 rounded overflow-hidden border border-[#E0DED7] dark:border-[#2C2C32]">
+            <div className="mb-6 rounded-xs overflow-hidden border border-[#E5E5E5] dark:border-[#2C2C32]">
               <img
                 src={article.image_url}
                 alt={article.title}
@@ -187,46 +182,46 @@ export default function ReaderModal({ article, onClose, onReact }) {
             </div>
           )}
 
-          {/* Editorial 3-Bullet Digest */}
-          <div className="bg-[#F2F0EB] dark:bg-[#1A1A22] p-4 sm:p-5 rounded border-l-4 border-[#111111] dark:border-[#E50914] mb-8">
+          {/* 3-Bullet Executive Digest (Boring Report Engine) */}
+          <div className="bg-[#F8F7F4] dark:bg-[#1A1A22] p-4 sm:p-5 rounded-xs border-l-3 border-[#111] dark:border-[#DDD] mb-8 font-sans">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs uppercase font-bold tracking-widest text-[#333] dark:text-[#CCC] font-serif">
-                Key Facts Summary (Boring Report Engine)
+              <h4 className="text-[11px] uppercase font-bold tracking-widest text-[#222] dark:text-[#CCC]">
+                Executive Summary (3 Factual Takeaways)
               </h4>
               <button
                 onClick={handleCopySummary}
                 className="text-[10px] text-[#666] dark:text-[#AAA] hover:text-[#111] dark:hover:text-white underline font-mono"
               >
-                {copiedSummary ? "✓ Copied" : "Copy Facts"}
+                {copiedSummary ? "✓ Copied" : "Copy Takeaways"}
               </button>
             </div>
-            <ul className="space-y-1.5 text-sm sm:text-base font-editorial-body text-[#222] dark:text-[#DDD]">
+            <ul className="space-y-1.5 text-sm sm:text-[15px] font-sans text-[#222] dark:text-[#DDD]">
               {bullets.map((bullet, idx) => (
                 <li key={idx} className="flex items-start space-x-2">
-                  <span className="font-bold text-[#111] dark:text-white mt-0.5">•</span>
+                  <span className="font-bold text-[#A81B1B] dark:text-[#E50914] mt-0.5">•</span>
                   <span>{bullet}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Clean Article Text */}
-          <div className={`font-editorial-body ${fontSizeClass} text-[#222222] dark:text-[#DDD] space-y-5 mb-8`}>
+          {/* Full Article Text */}
+          <div className={`font-serif ${fontSizeClass} text-[#222222] dark:text-[#DDD] space-y-5 mb-8`}>
             {article.content ? (
               article.content.split("\n\n").map((para, i) => (
                 <p key={i}>{para}</p>
               ))
             ) : (
-              <p className="italic text-[#777] dark:text-[#888]">
-                This dispatch was ingested via rapid wire syndication. Full uncompressed body text is accessible at the original publisher.
+              <p className="italic text-[#777] dark:text-[#888] font-sans">
+                This dispatch was ingested via rapid news syndication. Full uncompressed body text is accessible at the original publisher.
               </p>
             )}
           </div>
 
-          {/* 1-Tap Reactions Bar */}
-          <div className="p-4 bg-[#F2F0EB] dark:bg-[#1E1E26] rounded border border-[#E0DED7] dark:border-[#2C2C34] mb-6">
+          {/* 1-Tap Sentiment Consensus Bar */}
+          <div className="p-4 bg-[#F8F7F4] dark:bg-[#181820] rounded-xs border border-[#E5E5E5] dark:border-[#282830] mb-6 font-sans">
             <div className="text-xs font-semibold text-[#555] dark:text-[#AAA] mb-2 font-mono uppercase tracking-wider">
-              Reader Consensus Voting:
+              Reader Consensus:
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -249,31 +244,31 @@ export default function ReaderModal({ article, onClose, onReact }) {
               </button>
               <button
                 onClick={() => onReact(article.id, "misleading")}
-                className="px-3 py-1.5 rounded border border-[#DDD] dark:border-[#333] bg-white dark:bg-[#151518] text-[#990000] dark:text-[#F87171] hover:border-[#999] text-xs transition-colors"
+                className="px-3 py-1.5 rounded border border-[#DDD] dark:border-[#333] bg-white dark:bg-[#151518] text-[#A81B1B] dark:text-[#F87171] hover:border-[#999] text-xs transition-colors"
               >
                 ⚠️ Misleading ({article.count_misleading || 0})
               </button>
             </div>
           </div>
 
-          {/* Action Row */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 ink-border-t">
+          {/* Prominent Link to Read Original Full Article */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-5 hairline-t font-sans">
             {article.original_url && (
               <a
                 href={article.original_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-5 py-2.5 bg-[#111111] dark:bg-[#F2EFEB] text-[#FAF9F6] dark:text-[#111] rounded text-xs font-semibold hover:bg-[#333] dark:hover:bg-white transition-colors text-center"
+                className="px-6 py-3 bg-[#111111] dark:bg-[#F2EFEB] text-[#FFFFFF] dark:text-[#111] rounded-xs text-xs font-bold hover:bg-[#333] dark:hover:bg-white transition-colors text-center shadow-xs"
               >
-                Open Original Wire Dispatch at {article.source_name} ↗
+                Read Original Full Article on {article.source_name} ↗
               </a>
             )}
 
             <button
               onClick={handleShare}
-              className="px-4 py-2.5 border border-[#111] dark:border-[#EEE] text-[#111] dark:text-[#EEE] rounded text-xs font-semibold hover:bg-[#111] hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors text-center"
+              className="px-5 py-3 border border-[#111] dark:border-[#EEE] text-[#111] dark:text-[#EEE] rounded-xs text-xs font-bold hover:bg-[#111] hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors text-center"
             >
-              📤 Share with Contacts
+              📤 Share Dispatch
             </button>
           </div>
 
